@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'waypoint_navigation = space_project.waypoint_navigation:main',
+            'astar_navigation_node = space_project.astar_navigation_node:main' 
         ],
     },
 )
