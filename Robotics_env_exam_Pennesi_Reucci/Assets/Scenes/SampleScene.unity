@@ -547,7 +547,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 201089264}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 1
   m_ParentAnchorPosition: {x: 0, y: 0.068, z: -0.032001495}
@@ -827,7 +827,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 254960044}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 0.82573503
   m_ParentAnchorPosition: {x: 0, y: 0.01, z: 0}
@@ -1555,7 +1555,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 829026607}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 0.114
   m_ParentAnchorPosition: {x: 0, y: 0.172, z: -0.032001495}
@@ -2136,6 +2136,8 @@ GameObject:
   - component: {fileID: 1108644194}
   - component: {fileID: 1108644195}
   - component: {fileID: 1108644197}
+  - component: {fileID: 1108644198}
+  - component: {fileID: 1108644199}
   m_Layer: 0
   m_Name: turtlebot3_burger_0
   m_TagString: robot
@@ -2262,7 +2264,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1108644188}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: affa764c3eb1a394dbddb77f26941958, type: 3}
   m_Name: 
@@ -2275,6 +2277,49 @@ MonoBehaviour:
   leftWheel: {fileID: 1181695178}
   rightWheel: {fileID: 1452449510}
   topicName: /astar_path
+--- !u!114 &1108644198
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1108644188}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3b97936bb834e24b816d31ec66665af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  linearSpeed: 1
+  angularSpeed: 180
+  reachThreshold: 0.05
+  topicName: /astar_path
+--- !u!54 &1108644199
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1108644188}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &1138680926 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2166343073828353711, guid: 75a288338abc8474795069b04adf6722, type: 3}
@@ -2380,7 +2425,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1181695174}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 0.02849894
   m_ParentAnchorPosition: {x: -0.08000183, y: 0.023, z: 0}
@@ -2666,7 +2711,7 @@ Transform:
   m_GameObject: {fileID: 1335194765}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 49.488564, y: 0.09021224, z: 49.485153}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3027,7 +3072,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1452449506}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 0.02849894
   m_ParentAnchorPosition: {x: 0.08000183, y: 0.023, z: 0}
@@ -4197,7 +4242,7 @@ ArticulationBody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2035931298}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 5
   m_Mass: 0.005
   m_ParentAnchorPosition: {x: 0, y: -0.004, z: -0.08100128}

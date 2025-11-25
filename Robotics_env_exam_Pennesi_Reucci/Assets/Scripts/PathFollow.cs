@@ -38,15 +38,19 @@ public class PathFollower : MonoBehaviour
     {
         if (!isMoving || path.Count == 0) return;
 
+        
         Vector3 target = path[currentIndex];
-        Vector3 currentPos = transform.position;
+       
+        Vector3 robotForward = (rightWheel.transform.position - leftWheel.transform.position).normalized; ;
+        robotForward.y = 0f;
+       // float distance = robotForward.magnitude;
+        
 
-        Vector3 dir = new Vector3(target.x - currentPos.x, 0f, target.z - currentPos.z);
-        float distance = dir.magnitude;
-        dir.Normalize();
+        Vector3 dirXZ = new Vector3(target.x - transform.position.x, 0f, target.z - transform.position.z);
+        float distance = dirXZ.magnitude;
+        dirXZ.Normalize();
 
-        // IMPORTANTE per TurtleBot3: usa transform.right come "forward"
-        float angleToTarget = Vector3.SignedAngle(transform.right, dir, Vector3.up) * Mathf.Deg2Rad;
+        float angleToTarget = Vector3.SignedAngle(robotForward, dirXZ, Vector3.up) * Mathf.Deg2Rad;
 
         // STEP 1 Se siamo vicino al punto passa al prossimo
         if (distance <= reachThreshold)
@@ -71,7 +75,7 @@ public class PathFollower : MonoBehaviour
         if (state == MoveState.Rotating)
         {
             Debug.Log("Angle Degrees: "+ angleDegrees);
-            if (angleDegrees > 10f)
+            if (angleDegrees > 2f)
             {
                 Debug.Log("STATE: Rotating. Angle to target: "+ angleToTarget+ "Angular speed: "+ angularSpeed);
                 
@@ -82,6 +86,10 @@ public class PathFollower : MonoBehaviour
                 //float rightSpeed = w * (wheelBase / 2f);
                 float leftSpeed = -w * (wheelBase * 6);
                 float rightSpeed = w * (wheelBase * 6);
+                float minWheelSpeed = 0.05f; // m/s
+                leftSpeed = Mathf.Sign(leftSpeed) * Mathf.Max(Mathf.Abs(leftSpeed), minWheelSpeed);
+                rightSpeed = Mathf.Sign(rightSpeed) * Mathf.Max(Mathf.Abs(rightSpeed), minWheelSpeed);
+
                 Debug.Log("Wheels speed. : leftSpeed: " + leftSpeed + "rightSpeed: " + rightSpeed);
                 SetWheelTarget(leftWheel, leftSpeed);
                 SetWheelTarget(rightWheel, rightSpeed);
@@ -99,7 +107,7 @@ public class PathFollower : MonoBehaviour
 
 
 
-        // STEP 3 � Movimento verso il target
+        // STEP 3 Movimento verso il target
         float v = linearSpeed;
         float wMove = Mathf.Clamp(angleToTarget * 2f, -angularSpeed, angularSpeed);
 
@@ -112,7 +120,7 @@ public class PathFollower : MonoBehaviour
 
     void SetWheelTarget(ArticulationBody wheel, float speed)
     {
-        // speed = velocit� lineare della ruota in m/s
+        // speed = velocita lineare della ruota in m/s
         float wheelRadPerSec = speed / wheelRadius; // converti in rad/s
         ArticulationDrive drive = wheel.xDrive;
         drive.targetVelocity = wheelRadPerSec * Mathf.Rad2Deg; // targetVelocity in gradi/s
