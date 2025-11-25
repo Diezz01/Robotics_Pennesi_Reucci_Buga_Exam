@@ -1,7 +1,8 @@
-﻿using UnityEngine;
+﻿using RosMessageTypes.Geometry;
 using Unity.Robotics.ROSTCPConnector;
-using RosMessageTypes.Geometry;
 using Unity.Robotics.UrdfImporter.Control;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace RosSharp.Control
 {
@@ -19,9 +20,9 @@ namespace RosSharp.Control
         public float maxLinearSpeed = 2; //  m/s
         public float maxRotationalSpeed = 1;//
         public float wheelRadius = 0.033f; //meters
-        public float trackWidth = 0.288f; // meters Distance between tyres
-        public float forceLimit = 10;
-        public float damping = 10;
+        public float trackWidth = 0.16f; // meters Distance between tyres
+        public float forceLimit = 100;
+        public float damping = 2;
 
         public float ROSTimeout = 0.5f;
         private float lastCmdReceived = 0f;
@@ -35,17 +36,73 @@ namespace RosSharp.Control
         {
             wA1 = wheel1.GetComponent<ArticulationBody>();
             wA2 = wheel2.GetComponent<ArticulationBody>();
+
+            // Rescaling parameters
+            //UpdateParametersByScale();
+
             SetParameters(wA1);
             SetParameters(wA2);
+
             ros = ROSConnection.GetOrCreateInstance();
             ros.Subscribe<TwistMsg>("/cmd_vel", ReceiveROSCmd);
         }
+
+        private void UpdateParametersByScale()
+        {
+            // 1️⃣ Aggiorna wheelRadius in base alla scala della ruota
+            MeshFilter mf = wheel1.GetComponent<MeshFilter>();
+            if (mf != null)
+            {
+                float meshRadius = mf.sharedMesh.bounds.extents.y; // raggio della mesh in unità Unity
+                float scale = wheel1.transform.lossyScale.y;        // scala globale della ruota
+                wheelRadius = meshRadius * scale;
+                Debug.Log("WheelRadius aggiornato: " + wheelRadius + " m");
+            }
+
+            // 2️⃣ Aggiorna trackWidth in base alla distanza attuale tra le ruote
+            float leftX = wheel1.transform.position.x;
+            float rightX = wheel2.transform.position.x;
+            trackWidth = Mathf.Abs(leftX - rightX);
+            Debug.Log("TrackWidth aggiornato: " + trackWidth + " m");
+
+            // 3️⃣ Aggiorna forceLimit in base alla scala del robot
+            // Approssimazione: forza proporzionale al quadrato della scala (massa aumenta con volume)
+            float scaleRobot = transform.lossyScale.x; // assume scala uniforme X/Y/Z
+            forceLimit *= scaleRobot * scaleRobot;
+            Debug.Log("ForceLimit aggiornato: " + forceLimit);
+        }
+
+
+        /*
+        private void UpdateTrackWidth()
+        {
+            float leftX = wheel1.transform.position.x;
+            float rightX = wheel2.transform.position.x;
+            trackWidth = Mathf.Abs(leftX - rightX);
+        }
+
+        private void UpdateWheelRadius()
+        {
+            // Prende la mesh della ruota
+            MeshFilter mf = wheel1.GetComponent<MeshFilter>();
+            if (mf != null)
+            {
+                float meshRadius = mf.sharedMesh.bounds.extents.y; // raggio in unità Unity
+
+                float scale = wheel1.transform.lossyScale.y;
+                wheelRadius = meshRadius * scale; // raggio reale
+
+                Debug.Log("Calcolato wheelRadius = " + wheelRadius + " metri");
+            }
+        }
+        */
 
         void ReceiveROSCmd(TwistMsg cmdVel)
         {
             rosLinear = (float)cmdVel.linear.x;
             rosAngular = (float)cmdVel.angular.z;
             lastCmdReceived = Time.time;
+            //Debug.Log("Ricevo dal topic /cmd_vel : "+rosLinear+"  "+ rosAngular);    
         }
 
         void FixedUpdate()

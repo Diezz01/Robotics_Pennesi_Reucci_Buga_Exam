@@ -1,7 +1,13 @@
+using RosMessageTypes.Nav;
+using System.IO;
+using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
+using static UnityEditor.PlayerSettings;
 
-public class RockSpawner : MonoBehaviour
+
+public class OccupancyGridGenerator : MonoBehaviour
 {
+
     [Header("Rock Prefabs")]
     [Tooltip("Array of rock prefabs to spawn")]
     public GameObject[] rockPrefabs;
@@ -48,14 +54,108 @@ public class RockSpawner : MonoBehaviour
 
     [Tooltip("Parent spawned rocks under this transform")]
     public Transform rocksParent;
+    //////////////
+
+    public int mapWidth = 100;   // celle
+    public int mapHeight = 100;  // celle
+    public float cellSize = 1.0f; // dimensione in metri
+    public float heightCheck = 0.0f;
+    public LayerMask obstacleLayer;
+
+    public string fileName = "unity_map";
+    public string topicName = "/map";
+    ROSConnection ros;
+    OccupancyGridMsg msg;
 
     void Start()
     {
+
         if (spawnOnStart)
         {
             SpawnRocks();
         }
+
+        ros = ROSConnection.GetOrCreateInstance();
+        ros.RegisterPublisher<OccupancyGridMsg>(topicName);
+
+        int[,] grid = new int[mapWidth, mapHeight];
+
+        Vector3 origin = transform.position - new Vector3(mapWidth, 0, mapHeight) * cellSize * 0.5f;
+
+        for (int x = 0; x < mapWidth; x++)
+        {
+            for (int y = 0; y < mapHeight; y++)
+            {
+                Vector3 cellCenter = origin + new Vector3(x * cellSize + cellSize / 2, heightCheck / 2, y * cellSize + cellSize / 2);
+
+                if (Physics.CheckBox(cellCenter, new Vector3(cellSize / 2, heightCheck / 2, cellSize / 2), Quaternion.identity, obstacleLayer))
+                {
+                    grid[x, y] = 1; // occupata
+                }
+                else
+                {
+                    grid[x, y] = 0;   // libera
+                }
+            }
+        }
+
+        SavePGM(grid);
+        SaveYAML();
+      //  Debug.Log("Occupancy Grid saved!");
+
+        msg = new OccupancyGridMsg();
+        msg.info.resolution = cellSize;
+        msg.info.width = (uint)mapWidth;
+        msg.info.height = (uint)mapHeight;
+        msg.info.origin.position.x = origin.x;
+        msg.info.origin.position.y = origin.z; // Unity Z -> ROS Y
+        msg.info.origin.position.z = 0;
+        msg.info.origin.orientation.w = 1.0f;
+
+        msg.data = new sbyte[mapWidth * mapHeight];
+        for (int y = 0; y < mapHeight; y++)
+            for (int x = 0; x < mapWidth; x++)
+                msg.data[y * mapWidth + x] = (sbyte)grid[x, y];
+
+        ros.Publish(topicName, msg);
+        Debug.Log("Map: Published");
     }
+
+    void SavePGM(int[,] grid)
+    {
+        string path = Path.Combine(Application.dataPath, fileName + ".pgm");
+        using (StreamWriter sw = new StreamWriter(path))
+        {
+            sw.WriteLine("P2");
+            sw.WriteLine($"{mapWidth} {mapHeight}");
+            sw.WriteLine("100");
+
+            for (int y = mapHeight - 1; y >= 0; y--)
+            {
+                for (int x = 0; x < mapWidth; x++)
+                {
+                    sw.Write(grid[x, y] + " ");
+                }
+                sw.WriteLine();
+            }
+        }
+    }
+
+    void SaveYAML()
+    {
+        string path = Path.Combine(Application.dataPath, fileName + ".yaml");
+        using (StreamWriter sw = new StreamWriter(path))
+        {
+            sw.WriteLine("image: " + fileName + ".pgm");
+            sw.WriteLine("resolution: " + cellSize);
+            sw.WriteLine("origin: [0.0, 0.0, 0.0]");
+            sw.WriteLine("negate: 0");
+            sw.WriteLine("occupied_thresh: 0.65");
+            sw.WriteLine("free_thresh: 0.196");
+        }
+    }
+
+
 
     /// <summary>
     /// Spawns rocks at random positions with random rotations
@@ -80,7 +180,7 @@ public class RockSpawner : MonoBehaviour
             SpawnSingleRock();
         }
 
-        Debug.Log($"RockSpawner: Spawned {numberOfRocks} rocks");
+        //Debug.Log($"RockSpawner: Spawned {numberOfRocks} rocks");
     }
 
     /// <summary>
@@ -134,7 +234,7 @@ public class RockSpawner : MonoBehaviour
             {
                 Destroy(child.gameObject);
             }
-            Debug.Log("RockSpawner: Cleared all rocks");
+           // Debug.Log("RockSpawner: Cleared all rocks");
         }
     }
 
@@ -156,4 +256,6 @@ public class RockSpawner : MonoBehaviour
         Vector3 size = maxPosition - minPosition;
         Gizmos.DrawWireCube(center, size);
     }
+
+
 }
