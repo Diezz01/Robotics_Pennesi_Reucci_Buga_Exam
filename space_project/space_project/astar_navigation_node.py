@@ -9,18 +9,9 @@ class UnityAStarController(Node):
     def __init__(self):
         super().__init__('unity_astar_controller')
 
-
-        # Subscriber all'odometria
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-
-        # Subscriber alla mappa
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
-        
-        # Publisher dei comandi veloci
-        #self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-
-        self.path_pub = self.create_publisher(Path, '/astar_path', 10)
-
+        self.path_pub = self.create_publisher(Path, 'astar_path', 10)
 
         # Parametri
         self.map_data = None
