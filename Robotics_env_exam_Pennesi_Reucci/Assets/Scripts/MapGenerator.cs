@@ -58,7 +58,7 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     public int mapWidth = 100;   // celle
     public int mapHeight = 100;  // celle
-    public float cellSize = 1.0f; // dimensione in metri
+    public float cellSize = 0.5f; // dimensione in metri
     public float heightCheck = 0.0f;
     public LayerMask obstacleLayer;
 
