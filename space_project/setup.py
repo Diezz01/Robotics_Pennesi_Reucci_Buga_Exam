@@ -25,7 +25,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'astar_navigation = space_project.astar_navigation:main',
+            'astar_navigation_node = space_project.astar_navigation_node:main',
+            'battery_manager = space_project.battery_manager:main',
         ],
     },
 )
