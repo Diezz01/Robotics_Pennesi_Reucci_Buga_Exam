@@ -10,7 +10,7 @@ def generate_launch_description():
             PushRosNamespace('robot_0'),
             Node(
                 package='space_project',
-                executable='astar_navigation',
+                executable='astar_navigation_node',
                 name='controller',
                 parameters=[
                     {'src_x': 49.0},
@@ -25,7 +25,7 @@ def generate_launch_description():
             PushRosNamespace('robot_1'),
             Node(
                 package='space_project',
-                executable='astar_navigation',
+                executable='astar_navigation_node',
                 name='controller',
                 parameters=[
                     {'src_x': 20.0},
