@@ -56,6 +56,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     public Transform rocksParent;
     //////////////
 
+
+    public GameObject robotPrefab;     // TurtleBot3 prefab
+    public Transform robotsParent;
+
     public int mapWidth = 100;   // celle
     public int mapHeight = 100;  // celle
     public float cellSize = 0.5f; // dimensione in metri
@@ -64,6 +68,18 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     public string fileName = "unity_map";
     public string topicName = "/map";
+
+    private Vector3[] chargingPoints = new Vector3[]
+    {
+        new Vector3(42f, 0f, -38f),
+        new Vector3(37f, 0f, -38f),
+        new Vector3(32f, 0f, -38f),
+        new Vector3(27f, 0f, -38f),
+        new Vector3(22f, 0f, -38f),
+        new Vector3(17f, 0f, -38f),
+    };
+
+
     ROSConnection ros;
     OccupancyGridMsg msg;
 
@@ -72,6 +88,7 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         if (spawnOnStart)
         {
+            SpawnRobots();
             SpawnRocks();
         }
 
@@ -155,7 +172,34 @@ public class OccupancyGridGenerator : MonoBehaviour
         }
     }
 
+    public void SpawnRobots()
+    {
+        if (robotPrefab == null)
+        {
+            Debug.LogWarning("RobotSpawner: prefab not found!");
+            return;
+        }
 
+        if (robotsParent == null)
+        {
+            GameObject parentObj = new GameObject("SpawnedRobots");
+            robotsParent = parentObj.transform;
+        }
+
+        int count = Random.Range(1, chargingPoints.Length + 1);
+
+        for (int i = 0; i < count; i++)
+        {
+            SpawnSingleRobot(chargingPoints[i]);
+        }
+
+        Debug.Log($"RobotSpawner: Spawned {count} robot.");
+    }
+
+    private void SpawnSingleRobot(Vector3 position)
+    {
+        Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+    }
 
     /// <summary>
     /// Spawns rocks at random positions with random rotations
