@@ -12,6 +12,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     [Tooltip("Array of rock prefabs to spawn")]
     public GameObject[] rockPrefabs;
 
+    public GameObject excPointPrefab;
+
+    public Transform excPointParent;
+
     [Header("Spawn Settings")]
     [Tooltip("Number of rocks to spawn")]
     public int numberOfRocks = 20;
@@ -86,10 +90,13 @@ public class OccupancyGridGenerator : MonoBehaviour
     void Start()
     {
 
+        int numRobots = Random.Range(1, chargingPoints.Length + 1);
+
         if (spawnOnStart)
         {
-            SpawnRobots();
+            SpawnRobots(numRobots);
             SpawnRocks();
+            SpawnExcavationPoints(numRobots);
         }
 
         ros = ROSConnection.GetOrCreateInstance();
@@ -172,7 +179,7 @@ public class OccupancyGridGenerator : MonoBehaviour
         }
     }
 
-    public void SpawnRobots()
+    public void SpawnRobots(int numRobots)
     {
         if (robotPrefab == null)
         {
@@ -186,14 +193,12 @@ public class OccupancyGridGenerator : MonoBehaviour
             robotsParent = parentObj.transform;
         }
 
-        int count = Random.Range(1, chargingPoints.Length + 1);
-
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < numRobots; i++)
         {
             SpawnSingleRobot(chargingPoints[i]);
         }
 
-        Debug.Log($"RobotSpawner: Spawned {count} robot.");
+        Debug.Log($"RobotSpawner: Spawned {numRobots} robot.");
     }
 
     private void SpawnSingleRobot(Vector3 position)
@@ -262,6 +267,54 @@ public class OccupancyGridGenerator : MonoBehaviour
         if (spawnedRock.GetComponent<MeshCollider>() == null)
         {
             MeshCollider meshCollider = spawnedRock.AddComponent<MeshCollider>();
+            meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
+        }
+    }
+
+    public void SpawnExcavationPoints(int numRobots)
+    {
+        if (excPointPrefab == null)
+        {
+            Debug.LogWarning("Excavation Point Spawner: prefab not found!");
+            return;
+        }
+
+        if (excPointParent == null)
+        {
+            GameObject parentObj = new GameObject("SpawnedExcPoint");
+            excPointParent = parentObj.transform;
+        }
+
+        for (int i = 0; i < numRobots; i++)
+        {
+            SpawnSingleExcPoint();
+        }
+
+        Debug.Log($"ExcPointSpawner: Spawned {numRobots} excavation point.");
+    }
+
+    public void SpawnSingleExcPoint()
+    {
+        // Generate random position
+        Vector3 randomPosition = new Vector3(
+            Random.Range(minPosition.x, maxPosition.x),
+            Random.Range(minPosition.y, maxPosition.y),
+            Random.Range(minPosition.z, maxPosition.z)
+        );
+
+        // Generate random rotation (X and Z vary, Y is fixed)
+        Quaternion rotation = Quaternion.Euler(
+            0f,
+            0f,
+            0f
+        );
+
+        // Instantiate the rock
+        GameObject spawnedExcPoint = Instantiate(excPointPrefab, randomPosition, rotation, excPointParent);
+
+        if (spawnedExcPoint.GetComponent<MeshCollider>() == null)
+        {
+            MeshCollider meshCollider = spawnedExcPoint.AddComponent<MeshCollider>();
             meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
         }
     }

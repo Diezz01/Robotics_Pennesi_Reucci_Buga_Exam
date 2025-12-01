@@ -161,7 +161,7 @@ GameObject:
   - component: {fileID: 79536563}
   - component: {fileID: 79536562}
   - component: {fileID: 79536561}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -623,7 +623,7 @@ GameObject:
   - component: {fileID: 207522708}
   - component: {fileID: 207522707}
   - component: {fileID: 207522706}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -777,6 +777,8 @@ MonoBehaviour:
   - {fileID: 7780972383534799365, guid: 319543aa0100a4996a997233179b9ac8, type: 3}
   - {fileID: 6691480826944822800, guid: 17eccaaf4fc4b460bbfe80bacb3bc357, type: 3}
   - {fileID: 7433901882389271155, guid: 259fea420f12e4e2a902923fda1f2b4b, type: 3}
+  excPointPrefab: {fileID: 2518592337923437832, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+  excPointParent: {fileID: 0}
   numberOfRocks: 20
   minPosition: {x: -50, y: 0, z: -50}
   maxPosition: {x: 50, y: 0, z: 50}
@@ -790,7 +792,7 @@ MonoBehaviour:
   maxScale: 1.5
   spawnOnStart: 1
   rocksParent: {fileID: 0}
-  robotPrefab: {fileID: 0}
+  robotPrefab: {fileID: 6983335240650746236, guid: 64acf68f636f05742ac44fb234bd9861, type: 3}
   robotsParent: {fileID: 0}
   mapWidth: 100
   mapHeight: 100
@@ -2545,7 +2547,7 @@ GameObject:
   - component: {fileID: 1009414030}
   - component: {fileID: 1009414029}
   - component: {fileID: 1009414028}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station6
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -3240,7 +3242,7 @@ GameObject:
   - component: {fileID: 1277518596}
   - component: {fileID: 1277518595}
   - component: {fileID: 1277518594}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station5
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4816,7 +4818,7 @@ GameObject:
   - component: {fileID: 1795473566}
   - component: {fileID: 1795473565}
   - component: {fileID: 1795473564}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5262,7 +5264,7 @@ GameObject:
   - component: {fileID: 2013656505}
   - component: {fileID: 2013656504}
   - component: {fileID: 2013656503}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Charge_station4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5489,6 +5491,67 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: -5765520587575248814, guid: 75a288338abc8474795069b04adf6722, type: 3}
+--- !u!1001 &2000266557486458609
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2518592337923437832, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_Name
+      value: MyFlag_0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437832, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 1.5629878
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 4.3423023
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2518592337923437833, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 99f00ecaa1d494f20ac7f87b1308d359, type: 3}
 --- !u!1001 &5671321622811302196
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5568,3 +5631,4 @@ SceneRoots:
   - {fileID: 2013656506}
   - {fileID: 1277518597}
   - {fileID: 1009414031}
+  - {fileID: 2000266557486458609}
