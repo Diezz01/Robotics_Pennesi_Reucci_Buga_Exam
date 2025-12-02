@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid, Path
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray
 import heapq
 
 # Define the Cell class
@@ -20,8 +20,14 @@ class UnityAStarController(Node):
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
         self.path_pub = self.create_publisher(Path, 'astar_path', 10)
 
+        self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
+        self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
+
+
         self.map_data = None
         self.start = None
+        self.robots_list = None
+        self.targets_list = None
         #self.src = (49, 49)  # Unity coordinates in meters
         #self.dest = (40, 40)   # Unity coordinates in meters
 
@@ -201,6 +207,16 @@ class UnityAStarController(Node):
         self.a_star_search()
 
         self.publish_path()
+
+    def robots_callback(self, msg):
+        self.robots_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+        self.get_logger().info(f"Ricevuti {len(self.robots_list)} robot in punti: {self.robots_list}")
+
+    def targets_callback(self, msg):
+        self.targets_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+        self.get_logger().info(f"Ricevuti {len(self.targets_list)} target in punti: {self.targets_list}")
+    
+
 
 def main(args=None):
     rclpy.init(args=args)

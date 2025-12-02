@@ -3,7 +3,8 @@ using System.IO;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using static UnityEditor.PlayerSettings;
-
+using RosMessageTypes.Geometry;
+using Unity.Robotics.ROSTCPConnector.MessageGeneration;
 
 public class OccupancyGridGenerator : MonoBehaviour
 {
@@ -72,6 +73,9 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     public string fileName = "unity_map";
     public string topicName = "/map";
+    public string topicRobotsName = "/robots";
+    public string topicTargetsName = "/targets";
+
 
     private Vector3[] chargingPoints = new Vector3[]
     {
@@ -88,19 +92,22 @@ public class OccupancyGridGenerator : MonoBehaviour
     OccupancyGridMsg msg;
 
     void Start()
-    {
-
+    {   
+        PoseArrayMsg msgRobots = new PoseArrayMsg();
+        PoseArrayMsg msgTargets = new PoseArrayMsg();
         int numRobots = Random.Range(1, chargingPoints.Length + 1);
 
         if (spawnOnStart)
         {
             SpawnRobots(numRobots);
             SpawnRocks();
-            SpawnExcavationPoints(numRobots);
+            msgTargets = SpawnExcavationPoints(numRobots);
         }
 
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<OccupancyGridMsg>(topicName);
+        ros.RegisterPublisher<PoseArrayMsg>(topicRobotsName);
+        ros.RegisterPublisher<PoseArrayMsg>(topicTargetsName);
 
         int[,] grid = new int[mapWidth, mapHeight];
 
@@ -125,7 +132,6 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         SavePGM(grid);
         SaveYAML();
-      //  Debug.Log("Occupancy Grid saved!");
 
         msg = new OccupancyGridMsg();
         msg.info.resolution = cellSize;
@@ -142,6 +148,23 @@ public class OccupancyGridGenerator : MonoBehaviour
                 msg.data[y * mapWidth + x] = (sbyte)grid[x, y];
 
         ros.Publish(topicName, msg);
+
+        // crea un array di PoseMsg della dimensione corretta
+        msgRobots.poses = new PoseMsg[numRobots];
+
+        // riempi il PoseArrayMsg con le prime numRobots coordinate
+        for (int i = 0; i < numRobots; i++)
+        {
+            Vector3 point = chargingPoints[i];
+            msgRobots.poses[i] = new PoseMsg(
+                new PointMsg(point.x, point.y, point.z),      // POSITION
+                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION fissa
+            );
+        }
+
+        ros.Publish(topicRobotsName, msgRobots);
+        ros.Publish(topicTargetsName, msgTargets);
+
         Debug.Log("Map: Published");
     }
 
@@ -271,12 +294,15 @@ public class OccupancyGridGenerator : MonoBehaviour
         }
     }
 
-    public void SpawnExcavationPoints(int numRobots)
+    public PoseArrayMsg SpawnExcavationPoints(int numRobots)
     {
+        PoseArrayMsg msgTargets = new PoseArrayMsg();
+        msgTargets.poses = new PoseMsg[numRobots];
+
         if (excPointPrefab == null)
         {
             Debug.LogWarning("Excavation Point Spawner: prefab not found!");
-            return;
+            return null;
         }
 
         if (excPointParent == null)
@@ -287,13 +313,20 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         for (int i = 0; i < numRobots; i++)
         {
-            SpawnSingleExcPoint();
+            Vector3 pos = SpawnSingleExcPoint();
+
+            msgTargets.poses[i] = new PoseMsg(
+                new PointMsg(pos.x, pos.y, pos.z),      // POSITION
+                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION fissa
+            );
+
         }
 
         Debug.Log($"ExcPointSpawner: Spawned {numRobots} excavation point.");
+        return msgTargets;
     }
 
-    public void SpawnSingleExcPoint()
+    public Vector3 SpawnSingleExcPoint()
     {
         // Generate random position
         Vector3 randomPosition = new Vector3(
@@ -317,6 +350,7 @@ public class OccupancyGridGenerator : MonoBehaviour
             MeshCollider meshCollider = spawnedExcPoint.AddComponent<MeshCollider>();
             meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
         }
+        return randomPosition;
     }
 
     /// <summary>
