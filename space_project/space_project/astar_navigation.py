@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid, Path
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray
 import heapq
 
 # Define the Cell class
@@ -18,7 +18,11 @@ class UnityAStarController(Node):
         super().__init__('unity_astar_controller')
 
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
+        self.target_explorer_sub = self.create_subscription(PoseArray, '/target', self.target_explorer_callback,10)
         self.path_pub = self.create_publisher(Path, '/astar_path', 10)
+
+      #  self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
+       # self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
 
         self.map_data = None
         self.start = None
@@ -76,25 +80,28 @@ class UnityAStarController(Node):
             print("->", p, end=" ")
         print()
 
-    def a_star_search(self):
-        # Convertiamo src e dest in indici di griglia
-        self.src = self.unity_to_grid(self.src[0], self.src[1])
-        self.dest = self.unity_to_grid(self.dest[0], self.dest[1])
-        print("NORMALIZED SRC: ", self.src)
-        print("NORMALIZED dest: ", self.dest)
+        return path
 
-        if not self.is_valid(self.src[0], self.src[1]) or not self.is_valid(self.dest[0], self.dest[1]):
+    def a_star_search(self, src, dest):
+        # Convertiamo src e dest in indici di griglia
+        path = []
+        src = self.unity_to_grid(src[0], src[1])
+        dest = self.unity_to_grid(dest[0], dest[1])
+        print("NORMALIZED SRC: ", src)
+        print("NORMALIZED dest: ", dest)
+
+        if not self.is_valid(src[0], src[1]) or not self.is_valid(dest[0], dest[1]):
             print("Source or destination is invalid")
             return
 
-        if self.is_destination(self.src[0], self.src[1], self.dest):
+        if self.is_destination(src[0], src[1], dest):
             print("We are already at the destination")
             return
 
         closed_list = [[False for _ in range(self.map_col)] for _ in range(self.map_row)]
         cell_details = [[Cell() for _ in range(self.map_col)] for _ in range(self.map_row)]
 
-        i, j = self.src
+        i, j = src
         cell_details[i][j].f = cell_details[i][j].g = cell_details[i][j].h = 0
         cell_details[i][j].parent_i = i
         cell_details[i][j].parent_j = j
@@ -112,15 +119,15 @@ class UnityAStarController(Node):
             for d in directions:
                 new_i, new_j = i + d[0], j + d[1]
                 if self.is_valid(new_i, new_j) and self.is_unblocked(self.map_data, new_i, new_j) and not closed_list[new_i][new_j]:
-                    if self.is_destination(new_i, new_j, self.dest):
+                    if self.is_destination(new_i, new_j, dest):
                         cell_details[new_i][new_j].parent_i = i
                         cell_details[new_i][new_j].parent_j = j
                         print("The destination cell is found")
-                        self.trace_path(cell_details, self.dest)
+                        path = self.trace_path(cell_details, dest)
                         found_dest = True
-                        return
+                        break
                     g_new = cell_details[i][j].g + 1.0
-                    h_new = self.calculate_h_value(new_i, new_j, self.dest)
+                    h_new = self.calculate_h_value(new_i, new_j, dest)
                     f_new = g_new + h_new
                     if cell_details[new_i][new_j].f == float('inf') or cell_details[new_i][new_j].f > f_new:
                         heapq.heappush(open_list, (f_new, new_i, new_j))
@@ -133,14 +140,15 @@ class UnityAStarController(Node):
         if not found_dest:
             print("Failed to find the destination cell")
 
-    def publish_path(self):
-        if not self.path:
+        self.publish_path(path)
+
+    def publish_path(self, path):
+        if not path:
             print("Fallita pubblicazione path")
             return
         path_msg = Path()
         path_msg.header.frame_id = "map"
-
-        for cell in self.path:
+        for cell in path:
             pose = PoseStamped()
             pose.header.frame_id = "map"
             app_coord = self.grid_to_unity(cell[0],cell[1])
@@ -151,7 +159,7 @@ class UnityAStarController(Node):
             path_msg.poses.append(pose)
         print("Pubblico il path")
         print("\nPATH PUBBLICATO (Unity coordinates):")
-        for i, cell in enumerate(self.path):
+        for i, cell in enumerate(path):
             x_u, y_u = self.grid_to_unity(cell[0], cell[1])
             print(f"Step {i}: GRID=({cell[0]}, {cell[1]}) -> UNITY=({x_u:.2f}, {y_u:.2f})")
         self.path_pub.publish(path_msg)
@@ -181,9 +189,23 @@ class UnityAStarController(Node):
             print(''.join(str(c) for c in r))
 
         # Avvia A*
-        self.a_star_search()
+        #self.a_star_search()
 
-        self.publish_path()
+        #self.publish_path()
+
+    def robots_callback(self, msg):
+        self.robots_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+        self.get_logger().info(f"Ricevuti {len(self.robots_list)} robot in punti: {self.robots_list}")
+
+    def targets_callback(self, msg):
+        self.targets_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+        self.get_logger().info(f"Ricevuti {len(self.targets_list)} target in punti: {self.targets_list}")
+    
+    def target_explorer_callback(self, msg):
+        explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+        self.get_logger().info(f"Ricevuto da explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
+        self.a_star_search(explorer_src_dest[0],explorer_src_dest[1])
+
 
 def main(args=None):
     rclpy.init(args=args)
