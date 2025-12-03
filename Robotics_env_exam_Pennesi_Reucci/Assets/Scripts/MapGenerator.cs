@@ -19,13 +19,13 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     [Header("Spawn Settings")]
     [Tooltip("Number of rocks to spawn")]
-    public int numberOfRocks = 20;
+    public int numberOfRocks = 30;
 
     [Tooltip("Minimum position bounds for spawning")]
-    public Vector3 minPosition = new Vector3(-50f, 0f, -50f);
+    public Vector3 minPosition = new Vector3(-48, 0, -48);
 
     [Tooltip("Maximum position bounds for spawning")]
-    public Vector3 maxPosition = new Vector3(50f, 0f, 50f);
+    public Vector3 maxPosition = new Vector3(48, 0, 48);
 
     [Header("Rotation Settings")]
     [Tooltip("Minimum rotation for X axis (in degrees)")]
@@ -51,7 +51,7 @@ public class OccupancyGridGenerator : MonoBehaviour
     public float minScale = 0.8f;
 
     [Tooltip("Maximum scale multiplier")]
-    public float maxScale = 1.5f;
+    public float maxScale = 1.0f;
 
     [Header("Spawning Options")]
     [Tooltip("Spawn rocks on Start")]
@@ -255,32 +255,51 @@ public class OccupancyGridGenerator : MonoBehaviour
         //Debug.Log($"RockSpawner: Spawned {numberOfRocks} rocks");
     }
 
-    /// <summary>
-    /// Spawns a single rock at a random position
-    /// </summary>
+    // Area where robots and base are placed
+    private bool IsInsideForbiddenArea(Vector3 pos)
+    {
+        return pos.x >= 10f && pos.x <= 49f &&
+               pos.z >= -49f && pos.z <= -35f;
+    }
+
+    private Vector3 GetValidRandomPosition()
+    {
+        Vector3 pos;
+
+        do
+        {
+            pos = new Vector3(
+                Random.Range(minPosition.x, maxPosition.x),
+                Random.Range(minPosition.y, maxPosition.y),
+                Random.Range(minPosition.z, maxPosition.z)
+            );
+
+            // Arrotonda alle coordinate intere
+            pos = new Vector3(
+                Mathf.Round(pos.x),
+                Mathf.Round(pos.y),
+                Mathf.Round(pos.z)
+            );
+
+        } while (IsInsideForbiddenArea(pos));  // RIGENERA se è dentro l’area proibita
+
+        return pos;
+    }
     public void SpawnSingleRock()
     {
-        // Select random rock prefab
         GameObject selectedPrefab = rockPrefabs[Random.Range(0, rockPrefabs.Length)];
 
-        // Generate random position
-        Vector3 randomPosition = new Vector3(
-            Random.Range(minPosition.x, maxPosition.x),
-            Random.Range(minPosition.y, maxPosition.y),
-            Random.Range(minPosition.z, maxPosition.z)
-        );
+        // Usa la funzione che genera SOLO posizioni valide
+        Vector3 randomPosition = GetValidRandomPosition();
 
-        // Generate random rotation (X and Z vary, Y is fixed)
         Quaternion randomRotation = Quaternion.Euler(
             Random.Range(minRotationX, maxRotationX),
             fixedRotationY,
             Random.Range(minRotationZ, maxRotationZ)
         );
 
-        // Instantiate the rock
         GameObject spawnedRock = Instantiate(selectedPrefab, randomPosition, randomRotation, rocksParent);
 
-        // Apply random scale if enabled
         if (randomizeScale)
         {
             float randomScale = Random.Range(minScale, maxScale);
@@ -290,9 +309,10 @@ public class OccupancyGridGenerator : MonoBehaviour
         if (spawnedRock.GetComponent<MeshCollider>() == null)
         {
             MeshCollider meshCollider = spawnedRock.AddComponent<MeshCollider>();
-            meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
+            meshCollider.convex = true;
         }
     }
+
 
     public PoseArrayMsg SpawnExcavationPoints(int numRobots)
     {
@@ -328,30 +348,16 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     public Vector3 SpawnSingleExcPoint()
     {
-        // Generate random position
-        Vector3 randomPosition = new Vector3(
-            Random.Range(minPosition.x, maxPosition.x),
-            Random.Range(minPosition.y, maxPosition.y),
-            Random.Range(minPosition.z, maxPosition.z)
-        );
+        Vector3 randomPosition = GetValidRandomPosition();
 
-        // Generate random rotation (X and Z vary, Y is fixed)
-        Quaternion rotation = Quaternion.Euler(
-            0f,
-            0f,
-            0f
-        );
+        Quaternion rotation = Quaternion.identity;
 
-        // Instantiate the rock
         GameObject spawnedExcPoint = Instantiate(excPointPrefab, randomPosition, rotation, excPointParent);
+        spawnedExcPoint.tag = "ExcavationPoint";
 
-        if (spawnedExcPoint.GetComponent<MeshCollider>() == null)
-        {
-            MeshCollider meshCollider = spawnedExcPoint.AddComponent<MeshCollider>();
-            meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
-        }
         return randomPosition;
     }
+
 
     /// <summary>
     /// Clears all spawned rocks
