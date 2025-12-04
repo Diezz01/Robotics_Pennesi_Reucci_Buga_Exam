@@ -1,6 +1,5 @@
 using RosMessageTypes.Geometry;
 using RosMessageTypes.Nav;
-using RosMessageTypes.Std;
 using System.Collections.Generic;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
@@ -14,26 +13,26 @@ public class ExplorerController : MonoBehaviour
     private Vector3 explorerBase = new Vector3(12f, 0f, -38f);
 
     [Header("Battery Management")]
+    public BatterySimulator batterySimulator; // Direct reference to battery
     public Vector3 chargingStationPosition = new Vector3(12f, 0f, -38f);
-    public float batteryDischargePerMeter = 0.5f;
-    public float lowBatteryThreshold = 30f;
-    public float chargedThreshold = 95f;
-    public float safetyCostMultiplier = 1.2f;
-    public string batteryTopicName = "/tb3_0/battery_state";
+    public float chargedThreshold = 95f;       // Battery % to consider charging complete
+    public float safetyCostMultiplier = 1.2f;  // Safety margin for cost estimates (20%)
 
-    private float currentBatteryLevel = 100f;
+    [Header("Mission Behavior")]
+    public bool continuousOperation = true; // If false, stops after one cycle
+
     private bool isChargingMission = false;
     private bool hasInsertedChargingMission = false;
 
-    public float linearSpeed = 4.0f;       // velocit� robot
-    public float angularSpeed = 180f;     // gradi/sec
-    public float reachThreshold = 0.01f;  // distanza minima per considerare punto raggiunto
+    public float linearSpeed = 4.0f;       // robot velocity
+    public float angularSpeed = 180f;     // degrees/sec
+    public float reachThreshold = 0.01f;  // minimum distance to consider point reached
 
     public string topicNameTarget = "/target";
     public string topicNamePath = "/astar_path";
 
     // -----------------------------
-    // PATH E TARGET
+    // PATH AND TARGET
     // -----------------------------
     private List<Vector3> excavationPointsList = new List<Vector3>();
     private Queue<Vector3> targetQueue = new Queue<Vector3>();
@@ -57,9 +56,6 @@ public class ExplorerController : MonoBehaviour
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
         ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
-
-        // Subscribe to battery state from BatterySimulator
-        ros.Subscribe<Float32Msg>(batteryTopicName, OnBatteryStateReceived);
     }
 
     void Update()
@@ -73,9 +69,9 @@ public class ExplorerController : MonoBehaviour
         // Check if charging is complete
         if (isChargingMission && !waitingForPath && !isMoving)
         {
-            if (currentBatteryLevel >= chargedThreshold)
+            if (batterySimulator.currentCharge >= chargedThreshold)
             {
-                Debug.Log($"<color=lime>Battery charged to {currentBatteryLevel:F1}%. Resuming mission.</color>");
+                Debug.Log($"<color=lime>Battery charged to {batterySimulator.currentCharge:F1}%. Resuming mission.</color>");
                 StartNextTarget();
             }
         }
@@ -87,7 +83,7 @@ public class ExplorerController : MonoBehaviour
     }
 
     // -----------------------------
-    // CARICO I PUNTI DI SCAVO
+    // LOAD EXCAVATION POINTS
     // -----------------------------
     private void GetExcavationPoints()
     {
@@ -98,14 +94,30 @@ public class ExplorerController : MonoBehaviour
             Vector3 pos = go.transform.position;
             excavationPointsList.Add(pos);
             targetQueue.Enqueue(pos);
-            Debug.Log("Punto di scavo aggiunto: " + pos);
+            Debug.Log("Excavation point added: " + pos);
         }
-        excavationPointsList.Add(explorerBase);
-        targetQueue.Enqueue(explorerBase);
+
+        Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
 
     // -----------------------------
-    // PUBBLICO IL TARGET SU ROS
+    // RELOAD EXCAVATION POINTS FOR CONTINUOUS CYCLE
+    // -----------------------------
+    private void ReloadMissionQueue()
+    {
+        // Clear the queue and reload excavation points for continuous operation
+        targetQueue.Clear();
+
+        foreach (Vector3 point in excavationPointsList)
+        {
+            targetQueue.Enqueue(point);
+        }
+
+        Debug.Log($"<color=green>Reloaded {targetQueue.Count} excavation points. Starting new mission cycle.</color>");
+    }
+
+    // -----------------------------
+    // PUBLISH TARGET TO ROS
     // -----------------------------
     private void PublishTarget(Vector3 target)
     {
@@ -127,12 +139,12 @@ public class ExplorerController : MonoBehaviour
 
         ros.Publish(topicNameTarget, msg);
 
-        Debug.Log($"<color=yellow>PoseArray pubblicato Robot: {robotPos} | Target: {target}</color>");
+        Debug.Log($"<color=yellow>PoseArray published Robot: {robotPos} | Target: {target}</color>");
         waitingForPath = true;
     }
 
     // -----------------------------
-    // CALLBACK PATH DA ROS
+    // PATH CALLBACK FROM ROS
     // -----------------------------
     private void OnRosPathReceived(PathMsg msg)
     {
@@ -154,25 +166,11 @@ public class ExplorerController : MonoBehaviour
         isMoving = true;
         state = MoveState.Rotating;
 
-        Debug.Log($"<color=green>Path ricevuto da ROS. Lunghezza: {currentPath.Count}</color>");
+        Debug.Log($"<color=green>Path received from ROS. Length: {currentPath.Count}</color>");
     }
 
     // -----------------------------
-    // CALLBACK BATTERY STATE
-    // -----------------------------
-    private void OnBatteryStateReceived(Float32Msg msg)
-    {
-        currentBatteryLevel = msg.data;
-
-        // Debug: Log battery updates periodically (every 5%)
-        if (Mathf.Abs(currentBatteryLevel % 5) < 0.1f)
-        {
-            Debug.Log($"<color=cyan>ExplorerController: Battery level received: {currentBatteryLevel:F1}%</color>");
-        }
-    }
-
-    // -----------------------------
-    // MOVIMENTO CON ROTAZIONE
+    // MOVEMENT WITH ROTATION
     // -----------------------------
     private void MoveAlongPathWithRotation()
     {
@@ -188,29 +186,29 @@ public class ExplorerController : MonoBehaviour
         float distance = dir.magnitude;
         Vector3 dirNorm = dir.normalized;
 
-        // Controllo se il punto � raggiunto
+        // Check if the point is reached
         if (distance <= reachThreshold)
         {
-            Debug.Log($"Raggiunto punto [{currentPathIndex}] del path: {target}");
+            Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
 
             currentPathIndex++;
             if (currentPathIndex >= currentPath.Count)
             {
-                Debug.Log("Path completato!");
+                Debug.Log("Path completed!");
                 isMoving = false;
                 OnReachedTarget();
                 return;
             }
 
-            Debug.Log($"Prossimo punto [{currentPathIndex}] del path: {currentPath[currentPathIndex]}");
+            Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
             state = MoveState.Rotating;
             return;
         }
 
-        // Calcolo angolo verso il target
+        // Calculate angle to target
         float angleToTarget = Vector3.SignedAngle(transform.forward, dirNorm, Vector3.up);
 
-        // ------- ROTAZIONE -------
+        // ------- ROTATION -------
         if (state == MoveState.Rotating)
         {
             if (Mathf.Abs(angleToTarget) > 2f)
@@ -226,7 +224,7 @@ public class ExplorerController : MonoBehaviour
             return;
         }
 
-        // ------- MOVIMENTO -------
+        // ------- MOVEMENT -------
         if (state == MoveState.Moving)
         {
             transform.position += transform.forward * linearSpeed * Time.deltaTime;
@@ -234,18 +232,18 @@ public class ExplorerController : MonoBehaviour
     }
 
     // -----------------------------
-    // TARGET RAGGIUNTO
+    // TARGET REACHED
     // -----------------------------
     private void OnReachedTarget()
     {
-        Debug.Log($"<color=cyan>Target raggiunto: {currentTarget}</color>");
+        Debug.Log($"<color=cyan>Target reached: {currentTarget}</color>");
 
         currentPath.Clear();
         currentPathIndex = 0;
 
         if (isChargingMission)
         {
-            Debug.Log($"<color=yellow>Arrived at charging station. Current battery: {currentBatteryLevel:F1}%. Waiting for charge...</color>");
+            Debug.Log($"<color=yellow>Arrived at charging station. Current battery: {batterySimulator.currentCharge:F1}%. Waiting for charge...</color>");
             // Charging completion will be detected in Update()
             return;
         }
@@ -255,7 +253,7 @@ public class ExplorerController : MonoBehaviour
     }
 
     // -----------------------------
-    // SELEZIONE PROSSIMO TARGET
+    // NEXT TARGET SELECTION
     // -----------------------------
     private void StartNextTarget()
     {
@@ -266,54 +264,61 @@ public class ExplorerController : MonoBehaviour
             isChargingMission = false;
             hasInsertedChargingMission = false;
             isReturningToBase = false;
-
-            // Check if there are remaining targets
-            if (targetQueue.Count == 0)
-            {
-                Debug.Log("<color=white>All missions completed!</color>");
-                return;
-            }
         }
 
+        // If queue is empty, reload excavation points for continuous operation
         if (targetQueue.Count == 0)
         {
-            Debug.Log("<color=white>No more points to visit.</color>");
-            return;
+            if (excavationPointsList.Count > 0 && continuousOperation)
+            {
+                Debug.Log("<color=lime>Mission cycle complete! Reloading excavation points for continuous operation.</color>");
+                ReloadMissionQueue();
+            }
+            else if (!continuousOperation)
+            {
+                Debug.Log("<color=white>Mission cycle complete. Continuous operation disabled - robot stopped.</color>");
+                return;
+            }
+            else
+            {
+                Debug.Log("<color=white>No excavation points available.</color>");
+                return;
+            }
         }
 
         Vector3 nextTarget = targetQueue.Peek();
 
         // Calculate cost to next target
         float distanceToTarget = Vector3.Distance(transform.position, nextTarget);
-        float costToTarget = distanceToTarget * batteryDischargePerMeter * safetyCostMultiplier;
+        float costToTarget = distanceToTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
 
         // Calculate cost to return to charging station from next target
         float distanceToChargingFromTarget = Vector3.Distance(nextTarget, chargingStationPosition);
-        float costToChargingFromTarget = distanceToChargingFromTarget * batteryDischargePerMeter * safetyCostMultiplier;
+        float costToChargingFromTarget = distanceToChargingFromTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
 
         // Total cost: go to target + return to charging
         float totalCost = costToTarget + costToChargingFromTarget;
 
         // Check if we have enough battery for mission + return to charging
-        if (currentBatteryLevel >= totalCost)
+        if (batterySimulator.currentCharge >= totalCost)
         {
             // Sufficient battery - proceed with mission
             currentTarget = targetQueue.Dequeue();
             isChargingMission = false;
             PublishTarget(currentTarget);
 
-            Debug.Log($"<color=cyan>Starting mission to {currentTarget}. Battery: {currentBatteryLevel:F1}% | Cost: {totalCost:F1}%</color>");
+            Debug.Log($"<color=cyan>Starting mission to {currentTarget}. Battery: {batterySimulator.currentCharge:F1}% | Cost: {totalCost:F1}%</color>");
         }
         else
         {
             // Insufficient battery - check if we can even reach charging station
             float distanceToCharging = Vector3.Distance(transform.position, chargingStationPosition);
-            float costToCharging = distanceToCharging * batteryDischargePerMeter * safetyCostMultiplier;
+            float costToCharging = distanceToCharging * batterySimulator.dischargePerMeter * safetyCostMultiplier;
 
-            if (currentBatteryLevel < costToCharging)
+            if (batterySimulator.currentCharge < costToCharging)
             {
                 // CRITICAL: Cannot reach charging station
-                Debug.LogError($"<color=red>CRITICAL: Battery too low to reach charging station! Battery: {currentBatteryLevel:F1}% | Required: {costToCharging:F1}%</color>");
+                Debug.LogError($"<color=red>CRITICAL: Battery too low to reach charging station! Battery: {batterySimulator.currentCharge:F1}% | Required: {costToCharging:F1}%</color>");
                 // Stop all operations - robot is stranded
                 return;
             }
@@ -321,7 +326,7 @@ public class ExplorerController : MonoBehaviour
             // Insert charging mission (only if not already inserted)
             if (!hasInsertedChargingMission)
             {
-                Debug.Log($"<color=yellow>Insufficient battery for mission. Inserting charging station visit. Battery: {currentBatteryLevel:F1}% | Required: {totalCost:F1}%</color>");
+                Debug.Log($"<color=yellow>Insufficient battery for mission. Inserting charging station visit. Battery: {batterySimulator.currentCharge:F1}% | Required: {totalCost:F1}%</color>");
                 hasInsertedChargingMission = true;
             }
 
