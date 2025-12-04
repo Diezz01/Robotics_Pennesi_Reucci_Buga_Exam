@@ -6,6 +6,7 @@ public class BatterySimulator : MonoBehaviour
 {
     [Header("ROS")]
     public string batteryTopic = "/tb3_0/battery_state";
+    public string chargingStateTopic = "/tb3_0/charging_status";
 
     [Header("Battery Settings")]
     public float maxCharge = 100f;
@@ -17,6 +18,7 @@ public class BatterySimulator : MonoBehaviour
     private ROSConnection ros;
     private Vector3 lastPosition;
     private bool isCharging = false;
+    private bool wasCharging = false;
 
     void Start()
     {
@@ -49,9 +51,25 @@ public class BatterySimulator : MonoBehaviour
 
         currentCharge = Mathf.Clamp(currentCharge, 0f, maxCharge);
 
-        // Publish to ROS
-        Float32Msg msg = new Float32Msg(currentCharge);
-        ros.Publish(batteryTopic, msg);
+        // Publish battery level to ROS
+        Float32Msg batteryMsg = new Float32Msg(currentCharge);
+        ros.Publish(batteryTopic, batteryMsg);
+
+        // Publish charging state change
+        if (isCharging != wasCharging)
+        {
+            BoolMsg chargingStatusMsg = new BoolMsg(isCharging);
+            ros.Publish(chargingStateTopic, chargingStatusMsg);
+            wasCharging = isCharging;
+
+            Debug.Log($"<color=magenta>Charging status: {isCharging} | Battery: {currentCharge:F1}%</color>");
+        }
+
+        // Warning for critical battery
+        if (currentCharge <= 10f && !isCharging)
+        {
+            Debug.LogWarning($"<color=red>CRITICAL BATTERY: {currentCharge:F1}%</color>");
+        }
     }
 
     void OnTriggerEnter(Collider other)
