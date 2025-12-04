@@ -25,9 +25,18 @@ public class BatterySimulator : MonoBehaviour
         ros = ROSConnection.GetOrCreateInstance();
         lastPosition = transform.position;
 
-        // Make sure the ROSConnection inspector has a publisher for this topic:
-        // Topic Name: /tb3_0/battery_state
-        // Message Type: std_msgs/Float32
+        // Debug: Check ROS connection
+        if (ros == null)
+        {
+            Debug.LogError("<color=red>BatterySimulator: ROSConnection is NULL! Cannot publish battery state.</color>");
+            return;
+        }
+
+        // Register publishers automatically
+        ros.RegisterPublisher<Float32Msg>(batteryTopic);
+        ros.RegisterPublisher<BoolMsg>(chargingStateTopic);
+
+        Debug.Log($"<color=green>BatterySimulator: ROS connected. Registered publishers for {batteryTopic} and {chargingStateTopic}</color>");
     }
 
     void Update()
@@ -52,17 +61,27 @@ public class BatterySimulator : MonoBehaviour
         currentCharge = Mathf.Clamp(currentCharge, 0f, maxCharge);
 
         // Publish battery level to ROS
-        Float32Msg batteryMsg = new Float32Msg(currentCharge);
-        ros.Publish(batteryTopic, batteryMsg);
+        if (ros != null)
+        {
+            Float32Msg batteryMsg = new Float32Msg(currentCharge);
+            ros.Publish(batteryTopic, batteryMsg);
+        }
+        else
+        {
+            Debug.LogError("<color=red>BatterySimulator: Cannot publish - ROS is null!</color>");
+        }
 
         // Publish charging state change
         if (isCharging != wasCharging)
         {
-            BoolMsg chargingStatusMsg = new BoolMsg(isCharging);
-            ros.Publish(chargingStateTopic, chargingStatusMsg);
-            wasCharging = isCharging;
+            if (ros != null)
+            {
+                BoolMsg chargingStatusMsg = new BoolMsg(isCharging);
+                ros.Publish(chargingStateTopic, chargingStatusMsg);
+                wasCharging = isCharging;
 
-            Debug.Log($"<color=magenta>Charging status: {isCharging} | Battery: {currentCharge:F1}%</color>");
+                Debug.Log($"<color=magenta>Charging status: {isCharging} | Battery: {currentCharge:F1}%</color>");
+            }
         }
 
         // Warning for critical battery
