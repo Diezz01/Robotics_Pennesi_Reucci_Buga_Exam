@@ -130,8 +130,8 @@ public class OccupancyGridGenerator : MonoBehaviour
             }
         }
 
-        SavePGM(grid);
-        SaveYAML();
+        //SavePGM(grid);
+        //SaveYAML();
 
         msg = new OccupancyGridMsg();
         msg.info.resolution = cellSize;
