@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 2
   tags:
   - robot
+  - ExcavationPoint
   - ChargingZone
   layers:
   - Default
@@ -13,8 +14,8 @@ TagManager:
   - Robot
   - Water
   - UI
-  - 
-  - 
+  - ExcPoint
+  - ChargeStation
   - 
   - 
   - 

@@ -17,6 +17,8 @@ class UnityAStarController(Node):
     def __init__(self):
         super().__init__('unity_astar_controller')
 
+
+
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
         self.target_explorer_sub = self.create_subscription(PoseArray, '/target', self.target_explorer_callback,10)
         self.path_pub = self.create_publisher(Path, '/astar_path', 10)
@@ -24,10 +26,30 @@ class UnityAStarController(Node):
       #  self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
        # self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
 
+
         self.map_data = None
         self.start = None
-        self.src = (49, 49)  # Unity coordinates in meters
-        self.dest = (40, 40)   # Unity coordinates in meters
+        self.robots_list = None
+        self.targets_list = None
+        #self.src = (49, 49)  # Unity coordinates in meters
+        #self.dest = (40, 40)   # Unity coordinates in meters
+
+        self.declare_parameter('src_x', 49.0)
+        self.declare_parameter('src_y', 49.0)
+        self.declare_parameter('dest_x', 40.0)
+        self.declare_parameter('dest_y', 40.0)
+
+        self.src = (
+            float(self.get_parameter('src_x').value),
+            float(self.get_parameter('src_y').value)
+        )
+        self.dest = (
+            float(self.get_parameter('dest_x').value),
+            float(self.get_parameter('dest_y').value)
+        )
+
+        self.get_logger().info(f"Robot starting at src={self.src} going to dest={self.dest}")
+
         self.path = []
         self.current_index = 0
         self.resolution = None
@@ -36,7 +58,7 @@ class UnityAStarController(Node):
 
     # Conversione Unity -> Grid
     def unity_to_grid(self, x, y):
-        """Converte coordinate Unity (-50→50) in indici griglia"""
+        """Converte coordinate Unity (-50:+50) in indici griglia"""
         grid_x = int((x + 50) * self.map_row / 100)
         grid_y = int((y + 50) * self.map_col / 100)
         # Clamp per sicurezza
@@ -46,7 +68,7 @@ class UnityAStarController(Node):
 
     def grid_to_unity(self, i, j):
         """
-        Converte coordinate della griglia (i, j) in coordinate Unity (-50 → 50).
+        Converte coordinate della griglia (i, j) in coordinate Unity (-50 : 50).
         """
         x_unity = (i / self.map_row) * 100 - 50
         y_unity = (j / self.map_col) * 100 - 50

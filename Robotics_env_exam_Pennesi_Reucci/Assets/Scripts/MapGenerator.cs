@@ -3,7 +3,8 @@ using System.IO;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using static UnityEditor.PlayerSettings;
-
+using RosMessageTypes.Geometry;
+using Unity.Robotics.ROSTCPConnector.MessageGeneration;
 
 public class OccupancyGridGenerator : MonoBehaviour
 {
@@ -12,15 +13,19 @@ public class OccupancyGridGenerator : MonoBehaviour
     [Tooltip("Array of rock prefabs to spawn")]
     public GameObject[] rockPrefabs;
 
+    public GameObject excPointPrefab;
+
+    public Transform excPointParent;
+
     [Header("Spawn Settings")]
     [Tooltip("Number of rocks to spawn")]
-    public int numberOfRocks = 20;
+    public int numberOfRocks = 30;
 
     [Tooltip("Minimum position bounds for spawning")]
-    public Vector3 minPosition = new Vector3(-50f, 0f, -50f);
+    public Vector3 minPosition = new Vector3(-48, 0, -48);
 
     [Tooltip("Maximum position bounds for spawning")]
-    public Vector3 maxPosition = new Vector3(50f, 0f, 50f);
+    public Vector3 maxPosition = new Vector3(48, 0, 48);
 
     [Header("Rotation Settings")]
     [Tooltip("Minimum rotation for X axis (in degrees)")]
@@ -46,7 +51,7 @@ public class OccupancyGridGenerator : MonoBehaviour
     public float minScale = 0.8f;
 
     [Tooltip("Maximum scale multiplier")]
-    public float maxScale = 1.5f;
+    public float maxScale = 1.0f;
 
     [Header("Spawning Options")]
     [Tooltip("Spawn rocks on Start")]
@@ -56,6 +61,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     public Transform rocksParent;
     //////////////
 
+
+    public GameObject robotPrefab;     // TurtleBot3 prefab
+    public Transform robotsParent;
+
     public int mapWidth = 100;   // celle
     public int mapHeight = 100;  // celle
     public float cellSize = 0.5f; // dimensione in metri
@@ -64,19 +73,41 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     public string fileName = "unity_map";
     public string topicName = "/map";
+    public string topicRobotsName = "/robots";
+    public string topicTargetsName = "/targets";
+
+
+    private Vector3[] chargingPoints = new Vector3[]
+    {
+        new Vector3(42f, 0f, -38f),
+        new Vector3(37f, 0f, -38f),
+        new Vector3(32f, 0f, -38f),
+        new Vector3(27f, 0f, -38f),
+        new Vector3(22f, 0f, -38f),
+        new Vector3(17f, 0f, -38f),
+    };
+
+
     ROSConnection ros;
     OccupancyGridMsg msg;
 
     void Start()
-    {
+    {   
+        PoseArrayMsg msgRobots = new PoseArrayMsg();
+        PoseArrayMsg msgTargets = new PoseArrayMsg();
+        int numRobots = Random.Range(1, chargingPoints.Length + 1);
 
         if (spawnOnStart)
         {
+            SpawnRobots(numRobots);
             SpawnRocks();
+            msgTargets = SpawnExcavationPoints(numRobots);
         }
 
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<OccupancyGridMsg>(topicName);
+        ros.RegisterPublisher<PoseArrayMsg>(topicRobotsName);
+        ros.RegisterPublisher<PoseArrayMsg>(topicTargetsName);
 
         int[,] grid = new int[mapWidth, mapHeight];
 
@@ -101,7 +132,6 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         SavePGM(grid);
         SaveYAML();
-      //  Debug.Log("Occupancy Grid saved!");
 
         msg = new OccupancyGridMsg();
         msg.info.resolution = cellSize;
@@ -118,6 +148,23 @@ public class OccupancyGridGenerator : MonoBehaviour
                 msg.data[y * mapWidth + x] = (sbyte)grid[x, y];
 
         ros.Publish(topicName, msg);
+
+        // crea un array di PoseMsg della dimensione corretta
+        msgRobots.poses = new PoseMsg[numRobots];
+
+        // riempi il PoseArrayMsg con le prime numRobots coordinate
+        for (int i = 0; i < numRobots; i++)
+        {
+            Vector3 point = chargingPoints[i];
+            msgRobots.poses[i] = new PoseMsg(
+                new PointMsg(point.x, point.y, point.z),      // POSITION
+                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION fissa
+            );
+        }
+
+        ros.Publish(topicRobotsName, msgRobots);
+        ros.Publish(topicTargetsName, msgTargets);
+
         Debug.Log("Map: Published");
     }
 
@@ -155,7 +202,32 @@ public class OccupancyGridGenerator : MonoBehaviour
         }
     }
 
+    public void SpawnRobots(int numRobots)
+    {
+        if (robotPrefab == null)
+        {
+            Debug.LogWarning("RobotSpawner: prefab not found!");
+            return;
+        }
 
+        if (robotsParent == null)
+        {
+            GameObject parentObj = new GameObject("SpawnedRobots");
+            robotsParent = parentObj.transform;
+        }
+
+        for (int i = 0; i < numRobots; i++)
+        {
+            SpawnSingleRobot(chargingPoints[i]);
+        }
+
+        Debug.Log($"RobotSpawner: Spawned {numRobots} robot.");
+    }
+
+    private void SpawnSingleRobot(Vector3 position)
+    {
+        Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+    }
 
     /// <summary>
     /// Spawns rocks at random positions with random rotations
@@ -183,32 +255,51 @@ public class OccupancyGridGenerator : MonoBehaviour
         //Debug.Log($"RockSpawner: Spawned {numberOfRocks} rocks");
     }
 
-    /// <summary>
-    /// Spawns a single rock at a random position
-    /// </summary>
+    // Area where robots and base are placed
+    private bool IsInsideForbiddenArea(Vector3 pos)
+    {
+        return pos.x >= 10f && pos.x <= 49f &&
+               pos.z >= -49f && pos.z <= -35f;
+    }
+
+    private Vector3 GetValidRandomPosition()
+    {
+        Vector3 pos;
+
+        do
+        {
+            pos = new Vector3(
+                Random.Range(minPosition.x, maxPosition.x),
+                Random.Range(minPosition.y, maxPosition.y),
+                Random.Range(minPosition.z, maxPosition.z)
+            );
+
+            // Arrotonda alle coordinate intere
+            pos = new Vector3(
+                Mathf.Round(pos.x),
+                Mathf.Round(pos.y),
+                Mathf.Round(pos.z)
+            );
+
+        } while (IsInsideForbiddenArea(pos));  // RIGENERA se è dentro l’area proibita
+
+        return pos;
+    }
     public void SpawnSingleRock()
     {
-        // Select random rock prefab
         GameObject selectedPrefab = rockPrefabs[Random.Range(0, rockPrefabs.Length)];
 
-        // Generate random position
-        Vector3 randomPosition = new Vector3(
-            Random.Range(minPosition.x, maxPosition.x),
-            Random.Range(minPosition.y, maxPosition.y),
-            Random.Range(minPosition.z, maxPosition.z)
-        );
+        // Usa la funzione che genera SOLO posizioni valide
+        Vector3 randomPosition = GetValidRandomPosition();
 
-        // Generate random rotation (X and Z vary, Y is fixed)
         Quaternion randomRotation = Quaternion.Euler(
             Random.Range(minRotationX, maxRotationX),
             fixedRotationY,
             Random.Range(minRotationZ, maxRotationZ)
         );
 
-        // Instantiate the rock
         GameObject spawnedRock = Instantiate(selectedPrefab, randomPosition, randomRotation, rocksParent);
 
-        // Apply random scale if enabled
         if (randomizeScale)
         {
             float randomScale = Random.Range(minScale, maxScale);
@@ -218,9 +309,55 @@ public class OccupancyGridGenerator : MonoBehaviour
         if (spawnedRock.GetComponent<MeshCollider>() == null)
         {
             MeshCollider meshCollider = spawnedRock.AddComponent<MeshCollider>();
-            meshCollider.convex = true; // puoi impostarlo su true se vuoi usarlo con Rigidbody
+            meshCollider.convex = true;
         }
     }
+
+
+    public PoseArrayMsg SpawnExcavationPoints(int numRobots)
+    {
+        PoseArrayMsg msgTargets = new PoseArrayMsg();
+        msgTargets.poses = new PoseMsg[numRobots];
+
+        if (excPointPrefab == null)
+        {
+            Debug.LogWarning("Excavation Point Spawner: prefab not found!");
+            return null;
+        }
+
+        if (excPointParent == null)
+        {
+            GameObject parentObj = new GameObject("SpawnedExcPoint");
+            excPointParent = parentObj.transform;
+        }
+
+        for (int i = 0; i < numRobots; i++)
+        {
+            Vector3 pos = SpawnSingleExcPoint();
+
+            msgTargets.poses[i] = new PoseMsg(
+                new PointMsg(pos.x, pos.y, pos.z),      // POSITION
+                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION fissa
+            );
+
+        }
+
+        Debug.Log($"ExcPointSpawner: Spawned {numRobots} excavation point.");
+        return msgTargets;
+    }
+
+    public Vector3 SpawnSingleExcPoint()
+    {
+        Vector3 randomPosition = GetValidRandomPosition();
+
+        Quaternion rotation = Quaternion.identity;
+
+        GameObject spawnedExcPoint = Instantiate(excPointPrefab, randomPosition, rotation, excPointParent);
+        spawnedExcPoint.tag = "ExcavationPoint";
+
+        return randomPosition;
+    }
+
 
     /// <summary>
     /// Clears all spawned rocks
