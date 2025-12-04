@@ -2229,6 +2229,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6983335240650746236, guid: 64acf68f636f05742ac44fb234bd9861, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1989951303}
+    - targetCorrespondingSourceObject: {fileID: 6983335240650746236, guid: 64acf68f636f05742ac44fb234bd9861, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1989951310}
   m_SourcePrefab: {fileID: 100100000, guid: 64acf68f636f05742ac44fb234bd9861, type: 3}
 --- !u!1 &1989951296 stripped
 GameObject:
@@ -2376,6 +2379,25 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   topicName: /astar_path
   lineRenderer: {fileID: 1989951303}
+--- !u!114 &1989951310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1989951296}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9b38b17f3dbf224ba26a0a87df19e2b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  batteryTopic: /tb3_0/battery_state
+  chargingStateTopic: /tb3_0/charging_status
+  maxCharge: 100
+  currentCharge: 100
+  dischargePerMeter: 0.5
+  dischargePerSecondIdle: 0.01
+  chargePerSecond: 5
 --- !u!1 &1993285235
 GameObject:
   m_ObjectHideFlags: 0
