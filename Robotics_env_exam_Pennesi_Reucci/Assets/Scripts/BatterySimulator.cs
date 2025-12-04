@@ -22,7 +22,7 @@ public class BatterySimulator : MonoBehaviour
 
     void Start()
     {
-        ros = ROSConnection.instance;
+        ros = ROSConnection.GetOrCreateInstance();
         lastPosition = transform.position;
 
         // Make sure the ROSConnection inspector has a publisher for this topic:
