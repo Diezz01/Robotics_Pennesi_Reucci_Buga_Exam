@@ -1,16 +1,27 @@
-# Space Project - ROS2 Navigation with A* Algorithm
+# Space Project - Battery-Aware Robot Navigation
 
-This ROS2 package implements multi-robot navigation using the A* pathfinding algorithm. The robots navigate through an occupancy grid map to reach their target destinations.
+This ROS2 package implements battery-aware multi-robot navigation using the A* pathfinding algorithm. Robots navigate through an occupancy grid map while monitoring battery levels and autonomously returning to charging stations when needed.
+
+## Features
+
+- ✅ **A* Pathfinding**: Optimal path planning with obstacle avoidance
+- ✅ **Battery Management**: Real-time battery monitoring and health metrics
+- ✅ **Autonomous Charging**: Robots automatically navigate to charging stations when battery is low
+- ✅ **Unity Integration**: Seamless communication with Unity simulation via ROS-TCP-Connector
+- ✅ **Multi-Robot Support**: Configurable for multiple robots with independent battery systems
 
 ## Prerequisites
 
-- ROS2 Jazzy (or compatible version)
-- Python 3.12+
-- Ubuntu/Linux environment
+- **ROS2 Jazzy** (or compatible version)
+- **Python 3.12+**
+- **Ubuntu/Linux environment**
+- **Unity 2022.3+** (for simulation)
 - Required ROS2 packages:
   - `rclpy`
   - `nav_msgs`
   - `geometry_msgs`
+  - `std_msgs`
+  - `ros_tcp_endpoint`
 
 ## Project Structure
 
@@ -19,15 +30,53 @@ space_project/
 ├── space_project/
 │   ├── __init__.py
 │   ├── astar_navigation_node.py    # A* navigation controller
-│   └── battery_manager.py          # Battery management node
+│   └── battery_manager.py          # Battery monitoring and health metrics
 ├── launch/
-│   └── multi_robots.launch.py      # Multi-robot launch file
+│   ├── multi_robots.launch.py      # Multi-robot launch file
+│   └── battery_system.launch.py    # Complete battery management system
 ├── package.xml
 ├── setup.py
 └── README.md
 ```
 
-## Building the Workspace
+## Architecture Overview
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Unity Simulation                          │
+│  ┌────────────────┐  ┌──────────────┐  ┌─────────────────┐ │
+│  │ExplorerController│  │BatterySimulator│  │ Charging Zone  │ │
+│  │ (Mission Logic) │  │  (Physics)    │  │   (Trigger)    │ │
+│  └────────────────┘  └──────────────┘  └─────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+            │                    │
+            │ /target            │ /battery_state
+            │ /astar_path        │ /charging_status
+            ▼                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   ROS2 System (Python)                       │
+│  ┌──────────────────┐         ┌────────────────────────┐   │
+│  │ astar_navigation │◄────────┤   battery_manager      │   │
+│  │  Path Planning   │         │  Health Monitoring     │   │
+│  └──────────────────┘         └────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         ROS-TCP-Endpoint (Unity Bridge)              │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Battery Management Flow
+
+1. **Battery Simulation** (Unity): BatterySimulator drains battery based on distance traveled
+2. **State Publishing** (Unity → ROS2): Current battery level published to `/tb3_0/battery_state`
+3. **Health Monitoring** (ROS2): battery_manager tracks drain rate and publishes metrics
+4. **Mission Planning** (Unity): ExplorerController checks battery before each mission
+5. **Autonomous Charging**: If battery insufficient, navigate to charging station first
+6. **Resume Mission**: After charging, automatically resume pending missions
+
+## Installation
 
 ### Step 1: Navigate to your ROS2 workspace
 
@@ -35,313 +84,493 @@ space_project/
 cd ~/ros2_ws
 ```
 
-### Step 2: Build all required packages
+### Step 2: Build the package
 
-Build all packages in the workspace (recommended for first-time setup):
-
+**First time setup (build all packages):**
 ```bash
 colcon build --symlink-install
 ```
 
-Or build specific packages individually:
-
+**Or build specific package:**
 ```bash
-# Build space_project
 colcon build --packages-select space_project --symlink-install
-
-# Build ROS-TCP-Endpoint (required for Unity communication)
-colcon build --packages-select ros_tcp_endpoint --symlink-install
 ```
 
-The `--symlink-install` flag creates symbolic links instead of copying files, making development faster.
+The `--symlink-install` flag creates symbolic links for faster development.
 
 ### Step 3: Source the workspace
-
-After building, source the setup file to add the package to your environment:
 
 ```bash
 source install/setup.bash
 ```
 
-**Important:** You need to source this file in every new terminal session, or add it to your `~/.bashrc`:
-
+**Pro tip:** Add to `~/.bashrc` for automatic sourcing:
 ```bash
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 ```
 
-## Launching the Application
+## Launching the System
 
-### Launch Multi-Robot Navigation
+### Option 1: Launch Complete Battery Management System (Recommended)
 
-Start the multi-robot navigation system with the default configuration:
-
-```bash
-ros2 launch space_project multi_robots.launch.py
-```
-
-This will start two robot controllers:
-- **robot_0**: Navigates from (49.0, 49.0) to (40.0, 40.0)
-- **robot_1**: Navigates from (20.0, 20.0) to (10.0, 10.0)
-
-### Launch with Custom Parameters
-
-You can launch individual nodes with custom source and destination coordinates:
+This launches all necessary nodes in one command:
 
 ```bash
-ros2 run space_project astar_navigation_node --ros-args \
-  -r __ns:=/robot_custom \
-  -p src_x:=30.0 \
-  -p src_y:=30.0 \
-  -p dest_x:=10.0 \
-  -p dest_y:=10.0
+ros2 launch space_project battery_system.launch.py
 ```
 
-## Unity Integration
+**What this starts:**
+- ✅ ROS-TCP-Endpoint (Unity communication on port 10000)
+- ✅ A* Navigation Node (path planning)
+- ✅ Battery Manager (monitoring and health metrics)
 
-### Starting the ROS-TCP-Endpoint Server
-
-To enable communication between ROS2 and Unity, you need to start the TCP endpoint server. This must be running before launching Unity.
-
-#### Step 1: Get your system IP address
-
+**With custom parameters:**
 ```bash
-hostname -I | awk '{print $1}'
+ros2 launch space_project battery_system.launch.py \
+  robot_name:=tb3_0 \
+  low_battery_threshold:=30.0 \
+  critical_battery_threshold:=15.0 \
+  charged_threshold:=95.0 \
+  publish_metrics_interval:=5.0
 ```
 
-Your current IP is: **172.18.216.162**
+### Option 2: Launch Nodes Separately (For Debugging)
 
-#### Step 2: Start the TCP endpoint server
-
-Open a **new terminal** (keep the navigation nodes running in the first terminal) and run:
-
+**Terminal 1 - ROS-TCP-Endpoint:**
 ```bash
-cd ~/ros2_ws
-source install/setup.bash
-ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=172.18.216.162 -p ROS_TCP_PORT:=10000
+ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0
 ```
 
-**Important parameters:**
-- `ROS_IP`: Your system's IP address (use the output from Step 1)
-- `ROS_TCP_PORT`: The port Unity will connect to (default: 10000)
-
-#### Step 3: Configure Unity
-
-In your Unity project, configure the ROS connection settings to:
-- **IP Address:** 172.18.216.162
-- **Port:** 10000
-
-### Complete Launch Sequence
-
-For a full system startup with Unity integration, use **two separate terminals**:
-
-**Terminal 1 - Navigation Nodes:**
-```bash
-cd ~/ros2_ws
-source install/setup.bash
-ros2 launch space_project multi_robots.launch.py
-```
-
-**Terminal 2 - TCP Endpoint:**
-```bash
-cd ~/ros2_ws
-source install/setup.bash
-ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=172.18.216.162 -p ROS_TCP_PORT:=10000
-```
-
-Then start your Unity application.
-
-## Expected Behavior
-
-When launched successfully, you should see output similar to:
-
-```
-[INFO] [launch]: All log files can be found below ~/.ros/log/...
-[INFO] [launch]: Default logging verbosity is set to INFO
-[INFO] [astar_navigation_node-1]: process started with pid [...]
-[INFO] [astar_navigation_node-2]: process started with pid [...]
-[astar_navigation_node-1] [INFO] [timestamp] [robot_0.controller]: Robot starting at src=(49.0, 49.0) going to dest=(40.0, 40.0)
-[astar_navigation_node-2] [INFO] [timestamp] [robot_1.controller]: Robot starting at src=(20.0, 20.0) going to dest=(10.0, 10.0)
-```
-
-## ROS2 Topics
-
-### Subscribed Topics
-
-- `/map` (nav_msgs/OccupancyGrid): The occupancy grid map for navigation
-- `/target` (geometry_msgs/PoseArray): Target positions for path planning
-
-### Published Topics
-
-- `/astar_path` (nav_msgs/Path): The computed A* path in Unity coordinates
-
-## How It Works
-
-1. **Map Reception**: Each robot controller subscribes to the `/map` topic to receive the occupancy grid
-2. **Coordinate Conversion**: Unity coordinates (-50 to +50) are converted to grid indices
-3. **A* Algorithm**: When a target is received, the A* algorithm computes the optimal path avoiding obstacles
-4. **Path Publishing**: The computed path is published as a sequence of waypoints in Unity coordinates
-
-## Troubleshooting
-
-### Issue: "Package 'space_project' not found"
-
-**Solution:**
-```bash
-# Rebuild the package
-colcon build --packages-select space_project --symlink-install
-
-# Source in a NEW terminal or re-source in current terminal
-source install/setup.bash
-```
-
-### Issue: "Package 'ros_tcp_endpoint' not found"
-
-**Solution:**
-```bash
-# Rebuild the ROS-TCP-Endpoint package
-colcon build --packages-select ros_tcp_endpoint --symlink-install
-
-# Source in a NEW terminal or re-source in current terminal
-source install/setup.bash
-```
-
-### Issue: Unity can't connect to ROS
-
-**Possible causes:**
-1. TCP endpoint server not running
-2. Wrong IP address or port
-3. Firewall blocking the connection
-
-**Solution:**
-```bash
-# Verify TCP endpoint is running
-ros2 node list | grep tcp
-
-# Check your current IP address
-hostname -I
-
-# Make sure the IP in Unity matches your ROS_IP parameter
-# Make sure firewall allows port 10000
-```
-
-### Issue: Nodes start but don't do anything
-
-**Cause:** The nodes are waiting for map and target data.
-
-**Solution:** Make sure your Unity environment or map publisher is running and publishing to `/map` and `/target` topics.
-
-Check if topics are available:
-```bash
-ros2 topic list
-ros2 topic echo /map
-```
-
-### Issue: Setup file not found
-
-**Solution:** Make sure you're running the source command from the workspace root:
-```bash
-cd ~/ros2_ws
-source install/setup.bash
-```
-
-### Issue: Changes to Python code not reflected
-
-**Solution:**
-If you used `--symlink-install`, Python changes should be immediate. If not, rebuild:
-```bash
-colcon build --packages-select space_project
-```
-
-For changes to `setup.py`, always rebuild:
-```bash
-colcon build --packages-select space_project --symlink-install
-```
-
-## Development Workflow
-
-### Making Changes
-
-1. Edit Python files in `space_project/space_project/`
-2. If you used `--symlink-install`, changes are immediate
-3. If you modified `setup.py` or added new files:
-   ```bash
-   colcon build --packages-select space_project --symlink-install
-   source install/setup.bash
-   ```
-
-### Testing Individual Nodes
-
-Test the A* navigation node:
+**Terminal 2 - A* Navigation:**
 ```bash
 ros2 run space_project astar_navigation_node
 ```
 
-Test the battery manager:
+**Terminal 3 - Battery Manager:**
 ```bash
-ros2 run space_project battery_manager
+ros2 run space_project battery_manager --ros-args \
+  -p robot_name:=tb3_0 \
+  -p low_battery_threshold:=30.0 \
+  -p critical_battery_threshold:=15.0 \
+  -p charged_threshold:=95.0
 ```
 
-### Viewing Node Info
+### Option 3: Multi-Robot Navigation (Legacy)
 
-Check running nodes:
+```bash
+ros2 launch space_project multi_robots.launch.py
+```
+
+## Unity Setup
+
+### 1. Configure ROSConnection GameObject
+
+In Unity Scene Hierarchy, find **ROSConnectionPrefab**:
+
+**ROS Connection Settings:**
+- **ROS IP Address**: `127.0.0.1` (if same machine) or your ROS machine IP
+- **ROS Port**: `10000`
+- ✅ **Connect on Startup**: Enabled
+
+### 2. Configure BatterySimulator Component
+
+On your robot GameObject:
+
+**Battery Settings:**
+- Max Charge: `100`
+- Current Charge: `100`
+- Discharge Per Meter: `0.5`
+- Discharge Per Second Idle: `0.01`
+- Charge Per Second: `5`
+
+**ROS Topics:**
+- Battery Topic: `/tb3_0/battery_state`
+- Charging State Topic: `/tb3_0/charging_status`
+
+### 3. Configure ExplorerController Component
+
+**Battery Management:**
+- Charging Station Position: `(12, 0, -38)` (match your scene)
+- Battery Discharge Per Meter: `0.5` (for cost estimation)
+- Low Battery Threshold: `30`
+- Charged Threshold: `95`
+- Safety Cost Multiplier: `1.2`
+- Battery Topic Name: `/tb3_0/battery_state`
+
+### 4. Create Charging Zone
+
+1. Create GameObject at charging station location (e.g., `12, 0, -38`)
+2. Add **Collider** component (Box or Sphere)
+3. ✅ Check **"Is Trigger"**
+4. Set Tag to **"ChargingZone"**
+5. Ensure robot has **Rigidbody** component
+
+## Complete Startup Sequence
+
+### Step 1: Start ROS2 System
+
+```bash
+cd ~/ros2_ws
+source install/setup.bash
+ros2 launch space_project battery_system.launch.py
+```
+
+**Expected output:**
+```
+============================================================
+Battery Management System Launched
+============================================================
+Robot Name: tb3_0
+Low Battery Threshold: 30.0%
+Critical Battery Threshold: 15.0%
+Charged Threshold: 95.0%
+Metrics Interval: 5.0s
+============================================================
+
+Monitor battery with:
+  ros2 topic echo /tb3_0/battery_state
+  ros2 topic echo /tb3_0/battery_health
+```
+
+### Step 2: Start Unity
+
+1. Open Unity project
+2. Press **Play**
+3. Check Unity Console for:
+   ```
+   ✅ BatterySimulator: ROS connected. Registered publishers...
+   ✅ ExplorerController: Battery level received: 100.0%
+   ```
+
+### Step 3: Monitor System (Optional)
+
+**Terminal 2 - Monitor Battery State:**
+```bash
+ros2 topic echo /tb3_0/battery_state
+```
+
+**Terminal 3 - Monitor Health Metrics:**
+```bash
+ros2 topic echo /tb3_0/battery_health
+```
+
+**Terminal 4 - Monitor Alerts:**
+```bash
+ros2 topic echo /tb3_0/battery_alert
+```
+
+## ROS2 Topics
+
+### Battery Topics
+
+| Topic | Type | Direction | Purpose |
+|-------|------|-----------|---------|
+| `/tb3_0/battery_state` | `std_msgs/Float32` | Unity → ROS2 | Current battery percentage |
+| `/tb3_0/charging_status` | `std_msgs/Bool` | Unity → ROS2 | Charging state (true/false) |
+| `/tb3_0/battery_health` | `std_msgs/String` (JSON) | ROS2 | Battery health metrics |
+| `/tb3_0/battery_alert` | `std_msgs/String` (JSON) | ROS2 | Battery alerts (LOW, CRITICAL) |
+
+### Navigation Topics
+
+| Topic | Type | Direction | Purpose |
+|-------|------|-----------|---------|
+| `/map` | `nav_msgs/OccupancyGrid` | Unity → ROS2 | Occupancy grid for navigation |
+| `/target` | `geometry_msgs/PoseArray` | Unity → ROS2 | Target positions [robot_pos, target_pos] |
+| `/astar_path` | `nav_msgs/Path` | ROS2 → Unity | Computed A* path waypoints |
+
+### Battery Health Message Format (JSON)
+
+```json
+{
+  "timestamp": "2025-12-04T10:30:15",
+  "battery_level": 45.2,
+  "is_charging": false,
+  "drain_rate_percent_per_second": 0.0234,
+  "estimated_remaining_seconds": 1932,
+  "status": "NORMAL"
+}
+```
+
+**Status Values**: `CHARGING`, `CRITICAL`, `LOW`, `NORMAL`, `FULL`
+
+## Monitoring and Debugging
+
+### Check System Status
+
+**List all nodes:**
 ```bash
 ros2 node list
 ```
-
-Get node information:
-```bash
-ros2 node info /robot_0/controller
+Expected:
+```
+/astar_navigation
+/battery_manager
+/ros_tcp_endpoint
 ```
 
-### Checking Logs
-
-View logs in real-time:
+**Check battery topic connection:**
 ```bash
-ros2 run rqt_console rqt_console
+ros2 topic info /tb3_0/battery_state
+```
+Expected:
+```
+Publisher count: 1  # Unity (BatterySimulator)
+Subscription count: 2  # ExplorerController + battery_manager
 ```
 
-Or check log files:
+**View ROS graph:**
 ```bash
-cd ~/.ros/log/latest/
+ros2 run rqt_graph rqt_graph
 ```
+
+### Logging
+
+**With verbose logging:**
+```bash
+ros2 launch space_project battery_system.launch.py --log-level DEBUG
+```
+
+**Save logs to file:**
+```bash
+ros2 launch space_project battery_system.launch.py 2>&1 | tee battery_$(date +%Y%m%d_%H%M%S).log
+```
+
+**Record topics for playback:**
+```bash
+ros2 bag record -a -o battery_session
+# Playback later with:
+ros2 bag play battery_session
+```
+
+**Check log files:**
+```bash
+cat ~/.ros/log/latest/battery_manager/stdout.log
+```
+
+## Expected Behavior
+
+### Normal Operation
+
+**Unity Console:**
+```
+✅ Starting mission to (5, 0, 10). Battery: 85.0% | Cost: 12.5%
+🟢 Target reached: (5, 0, 10)
+✅ Starting mission to (15, 0, 20). Battery: 72.5% | Cost: 18.0%
+```
+
+**ROS2 Terminal:**
+```
+[INFO] [battery_manager]: 📊 Battery: 85.0% | Status: NORMAL | Drain: 0.0234%/s
+[INFO] [battery_manager]: 📊 Battery: 72.5% | Status: NORMAL | Drain: 0.0245%/s
+```
+
+### Low Battery Scenario
+
+**Unity Console:**
+```
+⚠️ Insufficient battery for mission. Inserting charging station visit. Battery: 28.5% | Required: 45.0%
+🟡 Arrived at charging station. Current battery: 28.5%. Waiting for charge...
+🔌 Charging status: True | Battery: 28.5%
+🟢 Battery charged to 95.0%. Resuming mission.
+```
+
+**ROS2 Terminal:**
+```
+[WARN] [battery_manager]: ⚠️ LOW BATTERY: 28.5%
+[INFO] [battery_manager]: 🔌 Charging started at 28.5%
+[INFO] [battery_manager]: ✅ Battery charged to 95.0%
+```
+
+## Troubleshooting
+
+### Unity Side
+
+**Issue: "No registered publisher on topic /tb3_0/battery_state"**
+
+**Cause:** ROSConnection not configured or BatterySimulator not registering publishers.
+
+**Solution:**
+1. Check Unity Console for: `"BatterySimulator: ROS connected. Registered publishers..."`
+2. Ensure ROSConnection GameObject exists in scene
+3. Verify BatterySimulator component is attached and enabled
+
+**Issue: Battery drains in Unity but not in ROS2**
+
+**Solution:**
+```bash
+# Check if Unity is publishing
+ros2 topic list | grep battery
+
+# Check for publishers
+ros2 topic info /tb3_0/battery_state
+
+# Echo topic to see values
+ros2 topic echo /tb3_0/battery_state
+```
+
+If no output:
+1. Restart Unity
+2. Check ROSConnection IP/Port settings
+3. Ensure ROS-TCP-Endpoint is running
+
+### ROS2 Side
+
+**Issue: "Package 'space_project' not found"**
+
+**Solution:**
+```bash
+colcon build --packages-select space_project --symlink-install
+source install/setup.bash  # In NEW terminal or re-source
+```
+
+**Issue: "battery_manager not found"**
+
+**Solution:**
+```bash
+# Check if entry point exists
+grep battery_manager setup.py
+
+# Rebuild
+colcon build --packages-select space_project --symlink-install
+source install/setup.bash
+```
+
+**Issue: Unity can't connect to ROS**
+
+**Solution:**
+```bash
+# Check if TCP endpoint is running
+ros2 node list | grep tcp
+
+# Verify IP address
+hostname -I
+
+# Make sure firewall allows port 10000
+sudo ufw allow 10000
+```
+
+**Issue: Nodes start but don't publish**
+
+**Cause:** Waiting for Unity to send map and targets.
+
+**Solution:**
+1. Start Unity first
+2. Check topics: `ros2 topic list`
+3. Verify `/map` and `/target` topics exist
+
+## Development
+
+### Making Changes
+
+**Python files:**
+1. Edit files in `space_project/space_project/`
+2. Changes are immediate (if using `--symlink-install`)
+3. No rebuild needed for Python code changes
+
+**Configuration files (setup.py, launch files):**
+```bash
+colcon build --packages-select space_project --symlink-install
+source install/setup.bash
+```
+
+### Testing Individual Components
+
+**Test A* navigation:**
+```bash
+ros2 run space_project astar_navigation_node
+```
+
+**Test battery manager:**
+```bash
+ros2 run space_project battery_manager --ros-args -p robot_name:=tb3_0
+```
+
+**Test with custom log level:**
+```bash
+ros2 run space_project battery_manager --ros-args -p robot_name:=tb3_0 --log-level DEBUG
+```
+
+## Parameters Reference
+
+### battery_manager Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `robot_name` | string | `tb3_0` | Robot identifier for topic namespacing |
+| `low_battery_threshold` | float | `30.0` | Battery % to trigger low battery warning |
+| `critical_battery_threshold` | float | `15.0` | Battery % to trigger critical alert |
+| `charged_threshold` | float | `95.0` | Battery % to consider charging complete |
+| `publish_metrics_interval` | float | `5.0` | Seconds between health metric publications |
 
 ## Quick Reference
 
 ```bash
 # ===== BUILD =====
-# Build all packages
-colcon build --symlink-install
-
-# Build specific packages
 colcon build --packages-select space_project --symlink-install
-colcon build --packages-select ros_tcp_endpoint --symlink-install
-
-# ===== SOURCE =====
 source install/setup.bash
 
 # ===== LAUNCH =====
-# Navigation nodes
+# Complete system (recommended)
+ros2 launch space_project battery_system.launch.py
+
+# With custom parameters
+ros2 launch space_project battery_system.launch.py \
+  robot_name:=tb3_0 low_battery_threshold:=30.0
+
+# Legacy multi-robot
 ros2 launch space_project multi_robots.launch.py
 
-# Unity TCP endpoint (in separate terminal)
-ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=172.18.216.162 -p ROS_TCP_PORT:=10000
-
-# Get your IP address
-hostname -I | awk '{print $1}'
-
 # ===== MONITORING =====
-# List topics
+# List all topics
 ros2 topic list
 
-# Echo a topic
-ros2 topic echo /astar_path
+# Monitor battery
+ros2 topic echo /tb3_0/battery_state
+ros2 topic echo /tb3_0/battery_health
+ros2 topic echo /tb3_0/battery_alert
 
 # List nodes
 ros2 node list
 
-# Node info
-ros2 node info /robot_0/controller
+# Node information
+ros2 node info /battery_manager
 
-# Check if TCP endpoint is running
+# ===== DEBUGGING =====
+# Launch with debug logging
+ros2 launch space_project battery_system.launch.py --log-level DEBUG
+
+# Check topic connections
+ros2 topic info /tb3_0/battery_state
+
+# View ROS graph
+ros2 run rqt_graph rqt_graph
+
+# Record session
+ros2 bag record -a -o session_name
+
+# ===== NETWORK =====
+# Get your IP
+hostname -I | awk '{print $1}'
+
+# Check if endpoint is running
 ros2 node list | grep tcp
 ```
+
+## Contributing
+
+When making changes:
+1. Test with `--symlink-install` for faster iteration
+2. Run with `--log-level DEBUG` to verify behavior
+3. Use `ros2 bag record` to capture test sessions
+4. Update this README with new features
+
+## License
+
+Apache-2.0
+
+## Support
+
+For issues related to:
+- **ROS2 nodes**: Check logs in `~/.ros/log/latest/`
+- **Unity integration**: Check Unity Console for ROS connection messages
+- **Battery system**: Use `ros2 topic echo /tb3_0/battery_health` for diagnostics
