@@ -25,16 +25,22 @@ This project implements a complete robotics simulation system combining:
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         UNITY SIMULATION                             │
 │                                                                       │
-│  ┌──────────────────┐  ┌───────────────────┐  ┌──────────────────┐ │
-│  │ ExplorerController │  │ BatterySimulator │  │  Charging Zone   │ │
-│  │                   │  │                   │  │                  │ │
-│  │ • Mission Queue   │  │ • Drain Physics   │  │ • Trigger Zone   │ │
-│  │ • Cost Calculation│  │ • Charge Physics  │  │ • Auto-detect    │ │
-│  │ • Decision Logic  │  │ • ROS Publishing  │  │                  │ │
-│  └──────────────────┘  └───────────────────┘  └──────────────────┘ │
-│           │                      │                                   │
-│           │ Requests Paths       │ Publishes Battery                │
-│           ▼                      ▼                                   │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │          GenericRobotController (Base Class)                   │ │
+│  │  • Movement & Pathfinding  • Battery Management References    │ │
+│  │  • ROS Communication       • Charging Station Logic           │ │
+│  └──────────────────────────┬────────────────────────────────────┘ │
+│                             │ Inherits                              │
+│  ┌──────────────────────────▼──────────┐  ┌──────────────────────┐ │
+│  │     ExplorerController               │  │  BatterySimulator    │ │
+│  │                                      │  │                      │ │
+│  │ • Mission Queue & Planning           │  │ • Drain Physics      │ │
+│  │ • Cost Calculation                   │  │ • Charge Physics     │ │
+│  │ • Excavation Point Management        │  │ • ROS Publishing     │ │
+│  └──────────────────────────────────────┘  └──────────────────────┘ │
+│           │                                        │                 │
+│           │ Requests Paths                         │ Publishes       │
+│           ▼                                        ▼                 │
 └───────────────────────────────────────────────────────────────────────┘
             │                      │
             │ /target              │ /battery_state
@@ -68,12 +74,11 @@ Robotics_Pennesi_Reucci_Buga_Exam/
 │   │   ├── Scenes/
 │   │   │   └── SampleScene.unity         # Main simulation scene
 │   │   ├── Scripts/
-│   │   │   ├── ExplorerController.cs     # Mission planning & battery-aware navigation
+│   │   │   ├── GenericRobotController.cs # Base class for all robot types
+│   │   │   ├── ExplorerController.cs     # Explorer-specific mission planning
 │   │   │   ├── BatterySimulator.cs       # Physics-based battery simulation
 │   │   │   ├── AStarController.cs        # Unity A* integration
-│   │   │   ├── PathFollow.cs             # Path execution
-│   │   │   ├── MapGenerator.cs           # Occupancy grid generation
-│   │   │   └── OdomPublisher.cs          # Odometry publishing
+│   │   │   └── MapGenerator.cs           # Occupancy grid generation
 │   │   └── Resources/
 │   │       └── ROSConnectionPrefab.prefab # ROS connection configuration
 │   └── ProjectSettings/
@@ -94,24 +99,40 @@ Robotics_Pennesi_Reucci_Buga_Exam/
 
 ### Unity Components
 
-#### 1. ExplorerController
-**Purpose**: Mission planning with battery-aware navigation
+#### 1. GenericRobotController (Base Class)
+**Purpose**: Shared functionality for all robot types
+
+**Responsibilities**:
+- Movement along paths with rotation
+- ROS2 communication (publishing targets, receiving paths)
+- Battery management references (BatterySimulator, charging station)
+- Path execution and waypoint following
+- Abstract target reached handler for derived classes
+
+**Key Parameters**:
+- Linear Speed: `4.0 m/s`
+- Angular Speed: `180 deg/s`
+- Reach Threshold: `0.5 m`
+- Charging Station Position: Configurable per robot type
+- Battery Simulator Reference: Linked in Inspector
+- Charged Threshold: `95%`
+- Safety Cost Multiplier: `1.2` (20% safety margin)
+
+#### 2. ExplorerController (Inherits from GenericRobotController)
+**Purpose**: Explorer-specific mission planning
 
 **Responsibilities**:
 - Manages excavation point queue
 - Calculates mission costs (target + return to charging)
 - Decides when to insert charging station visits
-- Publishes navigation targets to ROS2
-- Receives and executes A* paths
+- Implements continuous operation mode
+- Overrides OnReachedTarget() for mission-specific behavior
 
-**Key Parameters**:
+**Explorer-Specific Parameters**:
 - Charging Station Position: `(12, 0, -38)`
-- Battery Discharge Per Meter: `0.5%`
-- Low Battery Threshold: `30%`
-- Charged Threshold: `95%`
-- Safety Cost Multiplier: `1.2` (20% safety margin)
+- Continuous Operation: `true` (continuous mission cycles)
 
-#### 2. BatterySimulator
+#### 3. BatterySimulator
 **Purpose**: Physics-based battery simulation
 
 **Responsibilities**:
@@ -127,7 +148,7 @@ Robotics_Pennesi_Reucci_Buga_Exam/
 - Discharge Per Second Idle: `0.01%`
 - Charge Per Second: `5%`
 
-#### 3. Charging Zone
+#### 4. Charging Zone
 **Setup**:
 - GameObject with Collider (Is Trigger: ✓)
 - Tag: `"ChargingZone"`
@@ -293,24 +314,32 @@ ROS2 (battery_manager):
 
 ### Inspector Configuration
 
-#### ExplorerController
+#### GenericRobotController (Base Class)
 ```
-Movement:
+Movement Settings:
 ├─ Linear Speed: 4.0 m/s
 ├─ Angular Speed: 180 deg/s
-└─ Reach Threshold: 0.01 m
+├─ Reach Threshold: 0.5 m
+└─ Robot Id: Set per robot type
 
 Battery Management:
-├─ Charging Station Position: (12, 0, -38)
-├─ Battery Discharge Per Meter: 0.5
-├─ Low Battery Threshold: 30
+├─ Battery Simulator: Reference to BatterySimulator component
+├─ Charging Station Position: Set per robot type
 ├─ Charged Threshold: 95
-├─ Safety Cost Multiplier: 1.2
-└─ Battery Topic Name: "/tb3_0/battery_state"
+└─ Safety Cost Multiplier: 1.2
 
 ROS Topics:
 ├─ Topic Name Target: "/target"
 └─ Topic Name Path: "/astar_path"
+```
+
+#### ExplorerController (Inherits from GenericRobotController)
+```
+Mission Behavior:
+└─ Continuous Operation: true (enables continuous mission cycles)
+
+Note: Movement, Battery Management, and ROS Topics are inherited from GenericRobotController
+      and configured in the base class inspector section.
 ```
 
 #### BatterySimulator
@@ -457,9 +486,9 @@ ros2 run rqt_graph rqt_graph
 
 1. **Modularity**: Each component has single responsibility
 2. **Testability**: Components can be tested independently
-3. **Reusability**: battery_manager can work with different robots
-4. **Scalability**: Easy to add multiple robots
-5. **Maintainability**: Changes to one component don't affect others
+3. **Reusability**: GenericRobotController enables multiple robot types with shared functionality
+4. **Scalability**: Easy to add new robot types by inheriting from GenericRobotController
+5. **Maintainability**: Changes to shared behavior only need updates in base class
 
 ### Safety Features
 

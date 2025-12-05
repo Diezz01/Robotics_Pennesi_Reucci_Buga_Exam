@@ -1649,7 +1649,6 @@ GameObject:
   m_Component:
   - component: {fileID: 328001264566948789}
   - component: {fileID: 2481486304236449822}
-  - component: {fileID: 124526927522130669}
   - component: {fileID: 948624132983157604}
   - component: {fileID: 2737849659207739282}
   - component: {fileID: 4427616733298921708}
@@ -1695,19 +1694,6 @@ MonoBehaviour:
   chosenAxis: 0
   currentOrientation: 0
   collisionExceptions: []
---- !u!114 &124526927522130669
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6983335240650746236}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2f7a099084a286047b8f92986f4c18f5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  topicName: /robot_0/odom
 --- !u!64 &948624132983157604
 MeshCollider:
   m_ObjectHideFlags: 0
