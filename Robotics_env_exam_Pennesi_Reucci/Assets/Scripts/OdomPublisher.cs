@@ -28,7 +28,7 @@ public class OdometryPublisher : MonoBehaviour
         header.frame_id = "odom";
         odom.header = header;
 
-        // posizione
+        // position
         Vector3 pos = transform.position;
         odom.pose.pose.position = new PointMsg(pos.x, pos.z, pos.y);
         //Debug.Log("Position x: " + pos.x + "z: "+pos.z+"y: "+pos.y);
@@ -36,7 +36,7 @@ public class OdometryPublisher : MonoBehaviour
         Quaternion rot = transform.rotation;
         odom.pose.pose.orientation = new QuaternionMsg(rot.x, rot.y, rot.z, rot.w);
 
-        // velocità zero (opzionale)
+        // velocitï¿½ zero (opzionale)
         odom.twist.twist.linear = new Vector3Msg(0, 0, 0);
         odom.twist.twist.angular = new Vector3Msg(0, 0, 0);
 

@@ -7,7 +7,7 @@ public class SimplePathFollower : MonoBehaviour
 {
     [Header("Movement")]
     public float linearSpeed = 1.0f;
-    public float angularSpeed = 180f;     // gradi al secondo
+    public float angularSpeed = 180f;     // degrees per second
     public float reachThreshold = 0.05f;
 
     private enum MoveState { Rotating, Moving }
@@ -44,13 +44,13 @@ public class SimplePathFollower : MonoBehaviour
         float distance = dir.magnitude;
         Vector3 dirNorm = dir.normalized;
 
-        // Se arrivato al punto  passa al successivo
+        // If point reached, move to next one
         if (distance <= reachThreshold)
         {
             currentIndex++;
             if (currentIndex >= path.Count)
             {
-                Debug.Log("Path completato!");
+                Debug.Log("Path completed!");
                 isMoving = false;
                 return;
             }
@@ -58,13 +58,13 @@ public class SimplePathFollower : MonoBehaviour
             return;
         }
 
-        // Angolo verso il target
+        // Angle to target
         float angleToTarget = Vector3.SignedAngle(transform.forward, dirNorm, Vector3.up);
 
-        // ------- ROTAZIONE -------
+        // ------- ROTATION -------
         if (state == MoveState.Rotating)
         {
-            if (Mathf.Abs(angleToTarget) > 2f) // rotazione precisa entro 2°
+            if (Mathf.Abs(angleToTarget) > 2f) // precise rotation within 2 degrees
             {
                 float rotateStep = Mathf.Sign(angleToTarget) * angularSpeed * Time.deltaTime;
                 rotateStep = Mathf.Clamp(rotateStep, -Mathf.Abs(angleToTarget), Mathf.Abs(angleToTarget));
@@ -78,7 +78,7 @@ public class SimplePathFollower : MonoBehaviour
             return;
         }
 
-        // ------- MOVIMENTO -------
+        // ------- MOVEMENT -------
         transform.position += transform.forward * linearSpeed * Time.deltaTime;
     }
 
@@ -91,7 +91,7 @@ public class SimplePathFollower : MonoBehaviour
         isMoving = true;
         state = MoveState.Rotating;
 
-        Debug.Log($"Ricevuto nuovo path con {newPath.Count} punti");
+        Debug.Log($"Received new path with {newPath.Count} points");
     }
 
 

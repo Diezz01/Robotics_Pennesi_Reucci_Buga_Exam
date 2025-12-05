@@ -49,27 +49,27 @@ namespace RosSharp.Control
 
         private void UpdateParametersByScale()
         {
-            // 1️⃣ Aggiorna wheelRadius in base alla scala della ruota
+            // 1️⃣ Update wheelRadius based on wheel scale
             MeshFilter mf = wheel1.GetComponent<MeshFilter>();
             if (mf != null)
             {
-                float meshRadius = mf.sharedMesh.bounds.extents.y; // raggio della mesh in unità Unity
-                float scale = wheel1.transform.lossyScale.y;        // scala globale della ruota
+                float meshRadius = mf.sharedMesh.bounds.extents.y; // mesh radius in Unity units
+                float scale = wheel1.transform.lossyScale.y;        // global wheel scale
                 wheelRadius = meshRadius * scale;
-                Debug.Log("WheelRadius aggiornato: " + wheelRadius + " m");
+                Debug.Log("WheelRadius updated: " + wheelRadius + " m");
             }
 
-            // 2️⃣ Aggiorna trackWidth in base alla distanza attuale tra le ruote
+            // 2️⃣ Update trackWidth based on current distance between wheels
             float leftX = wheel1.transform.position.x;
             float rightX = wheel2.transform.position.x;
             trackWidth = Mathf.Abs(leftX - rightX);
-            Debug.Log("TrackWidth aggiornato: " + trackWidth + " m");
+            Debug.Log("TrackWidth updated: " + trackWidth + " m");
 
-            // 3️⃣ Aggiorna forceLimit in base alla scala del robot
-            // Approssimazione: forza proporzionale al quadrato della scala (massa aumenta con volume)
-            float scaleRobot = transform.lossyScale.x; // assume scala uniforme X/Y/Z
+            // 3️⃣ Update forceLimit based on robot scale
+            // Approximation: force proportional to scale squared (mass increases with volume)
+            float scaleRobot = transform.lossyScale.x; // assume uniform X/Y/Z scale
             forceLimit *= scaleRobot * scaleRobot;
-            Debug.Log("ForceLimit aggiornato: " + forceLimit);
+            Debug.Log("ForceLimit updated: " + forceLimit);
         }
 
 
@@ -83,16 +83,16 @@ namespace RosSharp.Control
 
         private void UpdateWheelRadius()
         {
-            // Prende la mesh della ruota
+            // Get the wheel mesh
             MeshFilter mf = wheel1.GetComponent<MeshFilter>();
             if (mf != null)
             {
-                float meshRadius = mf.sharedMesh.bounds.extents.y; // raggio in unità Unity
+                float meshRadius = mf.sharedMesh.bounds.extents.y; // radius in Unity units
 
                 float scale = wheel1.transform.lossyScale.y;
-                wheelRadius = meshRadius * scale; // raggio reale
+                wheelRadius = meshRadius * scale; // real radius
 
-                Debug.Log("Calcolato wheelRadius = " + wheelRadius + " metri");
+                Debug.Log("Calculated wheelRadius = " + wheelRadius + " meters");
             }
         }
         */
@@ -102,7 +102,7 @@ namespace RosSharp.Control
             rosLinear = (float)cmdVel.linear.x;
             rosAngular = (float)cmdVel.angular.z;
             lastCmdReceived = Time.time;
-            //Debug.Log("Ricevo dal topic /cmd_vel : "+rosLinear+"  "+ rosAngular);    
+            //Debug.Log("Received from topic /cmd_vel : "+rosLinear+"  "+ rosAngular);    
         }
 
         void FixedUpdate()

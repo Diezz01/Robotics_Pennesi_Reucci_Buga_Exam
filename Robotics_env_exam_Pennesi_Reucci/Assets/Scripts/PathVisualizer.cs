@@ -34,13 +34,13 @@ public class PathVisualizerROS : MonoBehaviour
     {
         if (msg.poses == null || msg.poses.Length == 0)
         {
-            Debug.LogWarning("Path vuoto ricevuto.");
+            Debug.LogWarning("Empty path received.");
             return;
         }
 
         if (lineRenderer == null)
         {
-            Debug.LogError("LineRenderer NON assegnato nel pannello!");
+            Debug.LogError("LineRenderer NOT assigned in the inspector!");
             return;
         }
 
@@ -50,8 +50,8 @@ public class PathVisualizerROS : MonoBehaviour
         {
             var pose = msg.poses[i].pose;
 
-            // ROS = X (avanti), Y (alto), Z (sinistra)
-            // Unity = X (destra), Y (alto), Z (avanti)
+            // ROS = X (forward), Y (up), Z (left)
+            // Unity = X (right), Y (up), Z (forward)
             Vector3 posUnity = new Vector3(
                 (float)pose.position.x,
                 (float)pose.position.z,

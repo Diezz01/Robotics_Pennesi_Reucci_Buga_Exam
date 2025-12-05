@@ -11,8 +11,8 @@ public class PathFollower : MonoBehaviour
     [Header("Movement")]
     public float linearSpeed = 1.0f;         // m/s
     public float angularSpeed = 1.0f;        // rad/s
-    public float reachThreshold = 0.05f;     // distanza minima per considerare waypoint raggiunto
-    public float wheelBase = 0.16f;          // distanza tra le ruote (m)
+    public float reachThreshold = 0.05f;     // minimum distance to consider waypoint reached
+    public float wheelBase = 0.16f;          // distance between wheels (m)
     public float wheelRadius = 0.033f;
     private enum MoveState { Rotating, Moving };
     private MoveState state = MoveState.Rotating;
@@ -52,7 +52,7 @@ public class PathFollower : MonoBehaviour
 
         float angleToTarget = Vector3.SignedAngle(robotForward, dirXZ, Vector3.up) * Mathf.Deg2Rad;
 
-        // STEP 1 Se siamo vicino al punto passa al prossimo
+        // STEP 1 If we're close to the point, move to the next one
         if (distance <= reachThreshold)
         {
             currentIndex++;
@@ -60,16 +60,16 @@ public class PathFollower : MonoBehaviour
             {
                 StopWheels();
                 isMoving = false;
-                Debug.Log("Path completato!");
+                Debug.Log("Path completed!");
                 return;
             }
 
-            // nuovo punto = ricomincia con rotazione
+            // new point = restart with rotation
             state = MoveState.Rotating;
             return;
         }
 
-        // STEP 2 � Ruota fino ad allinearti
+        // STEP 2 - Rotate until aligned
         float angleDegrees = Mathf.Abs(angleToTarget * Mathf.Rad2Deg);//TODO UNDERSTAND WHY ANGLE DEGREES DO NOT CHANGE EVEN IF THE ROBOT ROTEATE
 
         if (state == MoveState.Rotating)
@@ -79,7 +79,7 @@ public class PathFollower : MonoBehaviour
             {
                 Debug.Log("STATE: Rotating. Angle to target: "+ angleToTarget+ "Angular speed: "+ angularSpeed);
                 
-                // Rotazione sul posto
+                // Rotation in place
                 float w = Mathf.Clamp(angleToTarget * 2f, -angularSpeed, angularSpeed);
 
                 //float leftSpeed = -w * (wheelBase / 2f);
@@ -97,7 +97,7 @@ public class PathFollower : MonoBehaviour
             else
             {
                 Debug.Log("STATE: Moving");
-                // Allineato inizia a muoverti
+                // Aligned, start moving
                 state = MoveState.Moving;
             }
             return;
@@ -107,7 +107,7 @@ public class PathFollower : MonoBehaviour
 
 
 
-        // STEP 3 Movimento verso il target
+        // STEP 3 Movement towards target
         float v = linearSpeed;
         float wMove = Mathf.Clamp(angleToTarget * 2f, -angularSpeed, angularSpeed);
 
@@ -120,10 +120,10 @@ public class PathFollower : MonoBehaviour
 
     void SetWheelTarget(ArticulationBody wheel, float speed)
     {
-        // speed = velocita lineare della ruota in m/s
-        float wheelRadPerSec = speed / wheelRadius; // converti in rad/s
+        // speed = linear velocity of the wheel in m/s
+        float wheelRadPerSec = speed / wheelRadius; // convert to rad/s
         ArticulationDrive drive = wheel.xDrive;
-        drive.targetVelocity = wheelRadPerSec * Mathf.Rad2Deg; // targetVelocity in gradi/s
+        drive.targetVelocity = wheelRadPerSec * Mathf.Rad2Deg; // targetVelocity in degrees/s
         wheel.xDrive = drive;
     }
 
@@ -140,7 +140,7 @@ public class PathFollower : MonoBehaviour
         currentIndex = 0;
         isMoving = true;
 
-        Debug.Log($"Ricevuto nuovo path con {newPath.Count} punti");
+        Debug.Log($"Received new path with {newPath.Count} points");
     }
 
     private void OnRosPathReceived(PathMsg msg)
@@ -149,7 +149,7 @@ public class PathFollower : MonoBehaviour
 
         foreach (var poseStamped in msg.poses)
         {
-            // Conversione coordinate ROS -> Unity
+            // ROS -> Unity coordinate conversion
             newPath.Add(new Vector3(
                 (float)poseStamped.pose.position.x,
                 0f,
