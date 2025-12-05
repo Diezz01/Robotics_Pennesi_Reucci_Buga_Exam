@@ -56,19 +56,19 @@ class UnityAStarController(Node):
         self.map_row = None
         self.map_col = None
 
-    # Conversione Unity -> Grid
+    # Unity -> Grid Conversion
     def unity_to_grid(self, x, y):
-        """Converte coordinate Unity (-50:+50) in indici griglia"""
+        """Converts Unity coordinates (-50:+50) to grid indices"""
         grid_x = int((x + 50) * self.map_row / 100)
         grid_y = int((y + 50) * self.map_col / 100)
-        # Clamp per sicurezza
+        # Clamp for safety
         grid_x = max(0, min(self.map_row - 1, grid_x))
         grid_y = max(0, min(self.map_col - 1, grid_y))
         return grid_x, grid_y
 
     def grid_to_unity(self, i, j):
         """
-        Converte coordinate della griglia (i, j) in coordinate Unity (-50 : 50).
+        Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
         """
         x_unity = (i / self.map_row) * 100 - 50
         y_unity = (j / self.map_col) * 100 - 50
@@ -79,7 +79,7 @@ class UnityAStarController(Node):
         return 0 <= row < self.map_row and 0 <= col < self.map_col
     
     def is_unblocked(self, grid, row, col):
-        # 0 = ostacolo, 1 = libero
+        # 0 = obstacle, 1 = free
         return grid[row][col] == 0
 
     def is_destination(self, row, col, dest):
@@ -105,7 +105,7 @@ class UnityAStarController(Node):
         return path
 
     def a_star_search(self, src, dest):
-        # Convertiamo src e dest in indici di griglia
+        # Convert src and dest to grid indices
         path = []
         src = self.unity_to_grid(src[0], src[1])
         dest = self.unity_to_grid(dest[0], dest[1])
@@ -166,7 +166,7 @@ class UnityAStarController(Node):
 
     def publish_path(self, path):
         if not path:
-            print("Fallita pubblicazione path")
+            print("Failed to publish path")
             return
         path_msg = Path()
         path_msg.header.frame_id = "map"
@@ -179,8 +179,8 @@ class UnityAStarController(Node):
             pose.pose.position.z = 0.0 
             pose.pose.orientation.w = 1.0
             path_msg.poses.append(pose)
-        print("Pubblico il path")
-        print("\nPATH PUBBLICATO (Unity coordinates):")
+        print("Publishing path")
+        print("\nPATH PUBLISHED (Unity coordinates):")
         for i, cell in enumerate(path):
             x_u, y_u = self.grid_to_unity(cell[0], cell[1])
             print(f"Step {i}: GRID=({cell[0]}, {cell[1]}) -> UNITY=({x_u:.2f}, {y_u:.2f})")
@@ -191,41 +191,41 @@ class UnityAStarController(Node):
         self.map_col = msg.info.height
         self.resolution = msg.info.resolution
 
-        # Convertiamo la mappa in lista di liste
+        # Convert map to list of lists
         grid = []
         for row in range(self.map_col):
             row_data = []
             for col in range(self.map_row):
                 index = row * self.map_row + col
                 if msg.data[index] == -1 or msg.data[index] > 0:
-                    row_data.append(1)  # ostacolo
+                    row_data.append(1)  # obstacle
                 else:
-                    row_data.append(0)  # libero
+                    row_data.append(0)  # free
             grid.append(row_data)
 
         self.map_data = grid
 
-        # Stampa la griglia
+        # Print the grid
         print("Occupancy Grid:")
         for r in grid:
             print(''.join(str(c) for c in r))
 
-        # Avvia A*
+        # Start A*
         #self.a_star_search()
 
         #self.publish_path()
 
     def robots_callback(self, msg):
         self.robots_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
-        self.get_logger().info(f"Ricevuti {len(self.robots_list)} robot in punti: {self.robots_list}")
+        self.get_logger().info(f"Received {len(self.robots_list)} robots at points: {self.robots_list}")
 
     def targets_callback(self, msg):
         self.targets_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
-        self.get_logger().info(f"Ricevuti {len(self.targets_list)} target in punti: {self.targets_list}")
+        self.get_logger().info(f"Received {len(self.targets_list)} targets at points: {self.targets_list}")
     
     def target_explorer_callback(self, msg):
         explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
-        self.get_logger().info(f"Ricevuto da explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
+        self.get_logger().info(f"Received from explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
         self.a_star_search(explorer_src_dest[0],explorer_src_dest[1])
 
 

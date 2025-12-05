@@ -8,24 +8,33 @@ using UnityEngine;
 
 public abstract class GenericRobotController : MonoBehaviour
 {
+    [Header("Movement Settings")]
     public float linearSpeed = 4.0f;       // robot speed
     public float angularSpeed = 180f;     // degree/second
     public float reachThreshold = 0.5f;  // minimum distance to say that a target is reached
     public string robotId = string.Empty;
 
+    [Header("Battery Management")]
+    public BatterySimulator batterySimulator; // Direct reference to battery
+    public Vector3 chargingStationPosition = Vector3.zero;
+    public float chargedThreshold = 95f;       // Battery % to consider charging complete
+    public float safetyCostMultiplier = 1.2f;  // Safety margin for cost estimates (20%)
+
     protected enum MoveState { Rotating, Moving }
     protected MoveState moveState =  MoveState.Rotating;
     protected bool isMoving = false;
 
-    protected List<Vector3> currentPath = new List<Vector3>(); //path from the current position of the robot to the target
+    protected List<Vector3> currentPath = new List<Vector3>(); // path from the current position of the robot to the target
     protected int currentPathIndex = 0;
     protected Vector3 currentTarget;
-    
+
     public string topicNameTarget = "/target";
     public string topicNamePath = "/astar_path";
 
     protected bool waitingForPath;
     protected bool isReturningToBase = false;
+    protected bool isChargingMission = false;
+    protected bool hasInsertedChargingMission = false;
 
     protected ROSConnection ros;
 
@@ -46,21 +55,21 @@ public abstract class GenericRobotController : MonoBehaviour
         float distance = dir.magnitude;
         Vector3 dirNorm = dir.normalized;
 
-        // Controllo se il punto è raggiunto
+        // Check if the point is reached
         if (distance <= reachThreshold)
         {
-            Debug.Log($"Raggiunto punto [{currentPathIndex}] del path: {target}");
+            Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
 
             currentPathIndex++;
             if (currentPathIndex >= currentPath.Count)
             {
-                Debug.Log("Path completato!");
+                Debug.Log("Path completed!");
                 isMoving = false;
                 OnReachedTarget();
                 return;
             }
 
-            Debug.Log($"Prossimo punto [{currentPathIndex}] del path: {currentPath[currentPathIndex]}");
+            Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
             moveState = MoveState.Rotating;
             return;
         }
@@ -98,7 +107,7 @@ public abstract class GenericRobotController : MonoBehaviour
 
         foreach (var pose in msg.poses)
         {
-            // Conversione ROS2 -> Unity (Z verticale ignorata, Y=0 piano)
+            // ROS2 -> Unity conversion (Z vertical ignored, Y=0 plane)
             Vector3 p = new Vector3(
                 (float)pose.pose.position.x,
                 0f,
@@ -111,7 +120,7 @@ public abstract class GenericRobotController : MonoBehaviour
         isMoving = true;
         moveState = MoveState.Rotating;
 
-        Debug.Log($"<color=green>Path ricevuto da ROS. Lunghezza: {currentPath.Count}</color>");
+        Debug.Log($"<color=green>Path received from ROS. Length: {currentPath.Count}</color>");
     }
 
     protected void PublishTarget(Vector3 target)
@@ -119,14 +128,14 @@ public abstract class GenericRobotController : MonoBehaviour
         PoseArrayMsg msg = new PoseArrayMsg();
         msg.poses = new PoseMsg[2];
 
-        // Posizione robot
+        // Robot position
         Vector3 robotPos = transform.position;
         PoseMsg robotPose = new PoseMsg();
         robotPose.position = new PointMsg(robotPos.x, robotPos.y, robotPos.z);
         robotPose.orientation = new QuaternionMsg(0, 0, 0, 1);
         msg.poses[0] = robotPose;
 
-        // Posizione target
+        // Target position
         PoseMsg targetPose = new PoseMsg();
         targetPose.position = new PointMsg(target.x, target.y, target.z);
         targetPose.orientation = new QuaternionMsg(0, 0, 0, 1);
@@ -134,7 +143,7 @@ public abstract class GenericRobotController : MonoBehaviour
 
         ros.Publish(topicNameTarget, msg);
 
-        Debug.Log($"<color=yellow>PoseArray pubblicato Robot: {robotPos} | Target: {target}</color>");
+        Debug.Log($"<color=yellow>PoseArray published Robot: {robotPos} | Target: {target}</color>");
         waitingForPath = true;
     }
     protected abstract void OnReachedTarget();

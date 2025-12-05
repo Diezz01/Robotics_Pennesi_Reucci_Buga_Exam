@@ -7,17 +7,20 @@ using RosMessageTypes.Nav;
 
 public class ExplorerController : GenericRobotController
 {
-    private Vector3 explorerBase = new Vector3(12f, 0f, -38f);
+    [Header("Mission Behavior")]
+    public bool continuousOperation = true; // If false, stops after one cycle
+
+    // -----------------------------
+    // PATH AND TARGET
+    // -----------------------------
     private List<Vector3> excavationPointsList = new List<Vector3>();
     private Queue<Vector3> targetQueue = new Queue<Vector3>();
-
-    private float batteryLevel = 100.0f;
-    private float batteryConsume = 0.5f; // battery consume per meter
 
     // Start is called before the first frame update
     void Start()
     {
         robotId = "explorer";
+        chargingStationPosition = new Vector3(12f, 0f, -38f);
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
         ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
@@ -32,12 +35,25 @@ public class ExplorerController : GenericRobotController
             StartNextTarget();
         }
 
+        // Check if charging is complete
+        if (isChargingMission && !waitingForPath && !isMoving)
+        {
+            if (batterySimulator.currentCharge >= chargedThreshold)
+            {
+                Debug.Log($"<color=lime>Battery charged to {batterySimulator.currentCharge:F1}%. Resuming mission.</color>");
+                StartNextTarget();
+            }
+        }
+
         if (waitingForPath) return;
         if (currentPath.Count == 0 || !isMoving) return;
 
         MoveAlongPathWithRotation();
     }
 
+    // -----------------------------
+    // LOAD EXCAVATION POINTS
+    // -----------------------------
     private void GetExcavationPoints()
     {
         GameObject[] trovati = GameObject.FindGameObjectsWithTag("ExcavationPoint");
@@ -49,56 +65,129 @@ public class ExplorerController : GenericRobotController
             targetQueue.Enqueue(pos);
             Debug.Log("Excavation point added: " + pos);
         }
-        excavationPointsList.Add(explorerBase);
-        targetQueue.Enqueue(explorerBase);
+
+        Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
 
+    // -----------------------------
+    // RELOAD EXCAVATION POINTS FOR CONTINUOUS CYCLE
+    // -----------------------------
+    private void ReloadMissionQueue()
+    {
+        // Clear the queue and reload excavation points for continuous operation
+        targetQueue.Clear();
+
+        foreach (Vector3 point in excavationPointsList)
+        {
+            targetQueue.Enqueue(point);
+        }
+
+        Debug.Log($"<color=green>Reloaded {targetQueue.Count} excavation points. Starting new mission cycle.</color>");
+    }
+
+    // -----------------------------
+    // TARGET REACHED
+    // -----------------------------
     protected override void OnReachedTarget()
     {
         Debug.Log($"<color=cyan>Target reached: {currentTarget}</color>");
 
-        float distance = Vector3.Distance(transform.position, currentTarget);
-        batteryLevel -= distance * batteryConsume;
-        Debug.Log($"<color=orange>Actual battery Level: {batteryLevel}%</color>");
-
         currentPath.Clear();
         currentPathIndex = 0;
 
-        if (isReturningToBase)
+        if (isChargingMission)
         {
-            Debug.Log("<color=lime>Back to base: battery charged</color>");
-            batteryLevel = 100f;
-            isReturningToBase = false;
-
-            StartNextTarget();
+            Debug.Log($"<color=yellow>Arrived at charging station. Current battery: {batterySimulator.currentCharge:F1}%. Waiting for charge...</color>");
+            // Charging completion will be detected in Update()
             return;
         }
 
+        // Normal mission point reached - continue to next target
         StartNextTarget();
     }
 
+    // -----------------------------
+    // NEXT TARGET SELECTION
+    // -----------------------------
     private void StartNextTarget()
     {
+        // If we just finished charging, reset the flag and continue
+        if (isChargingMission)
+        {
+            Debug.Log("<color=lime>Charging complete! Resuming mission queue.</color>");
+            isChargingMission = false;
+            hasInsertedChargingMission = false;
+            isReturningToBase = false;
+        }
+
+        // If queue is empty, reload excavation points for continuous operation
         if (targetQueue.Count == 0)
         {
-            Debug.Log("<color=white>All point are visited</color>");
-            return;
+            if (excavationPointsList.Count > 0 && continuousOperation)
+            {
+                Debug.Log("<color=lime>Mission cycle complete! Reloading excavation points for continuous operation.</color>");
+                ReloadMissionQueue();
+            }
+            else if (!continuousOperation)
+            {
+                Debug.Log("<color=white>Mission cycle complete. Continuous operation disabled - robot stopped.</color>");
+                return;
+            }
+            else
+            {
+                Debug.Log("<color=white>No excavation points available.</color>");
+                return;
+            }
         }
 
         Vector3 nextTarget = targetQueue.Peek();
-        float expectedCost = Vector3.Distance(transform.position, nextTarget) * batteryConsume;
 
-        if (batteryLevel >= expectedCost)
+        // Calculate cost to next target
+        float distanceToTarget = Vector3.Distance(transform.position, nextTarget);
+        float costToTarget = distanceToTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
+
+        // Calculate cost to return to charging station from next target
+        float distanceToChargingFromTarget = Vector3.Distance(nextTarget, chargingStationPosition);
+        float costToChargingFromTarget = distanceToChargingFromTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
+
+        // Total cost: go to target + return to charging
+        float totalCost = costToTarget + costToChargingFromTarget;
+
+        // Check if we have enough battery for mission + return to charging
+        if (batterySimulator.currentCharge >= totalCost)
         {
+            // Sufficient battery - proceed with mission
             currentTarget = targetQueue.Dequeue();
+            isChargingMission = false;
             PublishTarget(currentTarget);
+
+            Debug.Log($"<color=cyan>Starting mission to {currentTarget}. Battery: {batterySimulator.currentCharge:F1}% | Cost: {totalCost:F1}%</color>");
         }
         else
         {
-            Debug.Log("<color=red>Low battery Level: back to the base</color>");
+            // Insufficient battery - check if we can even reach charging station
+            float distanceToCharging = Vector3.Distance(transform.position, chargingStationPosition);
+            float costToCharging = distanceToCharging * batterySimulator.dischargePerMeter * safetyCostMultiplier;
+
+            if (batterySimulator.currentCharge < costToCharging)
+            {
+                // CRITICAL: Cannot reach charging station
+                Debug.LogError($"<color=red>CRITICAL: Battery too low to reach charging station! Battery: {batterySimulator.currentCharge:F1}% | Required: {costToCharging:F1}%</color>");
+                // Stop all operations - robot is stranded
+                return;
+            }
+
+            // Insert charging mission (only if not already inserted)
+            if (!hasInsertedChargingMission)
+            {
+                Debug.Log($"<color=yellow>Insufficient battery for mission. Inserting charging station visit. Battery: {batterySimulator.currentCharge:F1}% | Required: {totalCost:F1}%</color>");
+                hasInsertedChargingMission = true;
+            }
+
+            isChargingMission = true;
             isReturningToBase = true;
-            currentTarget = explorerBase;
-            PublishTarget(explorerBase);
+            currentTarget = chargingStationPosition;
+            PublishTarget(chargingStationPosition);
         }
     }
 
