@@ -2250,12 +2250,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2727415c62f4e6a43a1e426328752fb7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  batterySimulator: {fileID: 1989951310}
   chargingStationPosition: {x: 12, y: 0, z: -38}
-  batteryDischargePerMeter: 0.5
-  lowBatteryThreshold: 30
   chargedThreshold: 95
   safetyCostMultiplier: 1.2
-  batteryTopicName: /tb3_0/battery_state
+  continuousOperation: 1
   linearSpeed: 4
   angularSpeed: 180
   reachThreshold: 0.5
