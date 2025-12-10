@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using RosMessageTypes.Nav;
+using System;
 
 public class ExplorerController : GenericRobotController
 {
@@ -13,14 +14,16 @@ public class ExplorerController : GenericRobotController
     // -----------------------------
     // PATH AND TARGET
     // -----------------------------
-    private List<Vector3> excavationPointsList = new List<Vector3>();
-    private Queue<Vector3> targetQueue = new Queue<Vector3>();
+    private List<MapTarget> excavationPointsList = new List<MapTarget>();
+    private Queue<MapTarget> targetQueue = new Queue<MapTarget>();
+    private MapTarget chargingStation; 
 
     // Start is called before the first frame update
     void Start()
     {
         robotId = "explorer";
         chargingStationPosition = new Vector3(12f, 0f, -38f);
+        chargingStation = new Target(chargingStationPosition);
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
         ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
@@ -60,14 +63,19 @@ public class ExplorerController : GenericRobotController
 
         foreach (GameObject go in trovati)
         {
-            Vector3 pos = go.transform.position;
-            excavationPointsList.Add(pos);
-            targetQueue.Enqueue(pos);
-            Debug.Log("Excavation point added: " + pos);
+            ExcavationPoint targetComponent = go.GetComponent<ExcavationPoint>();
+
+            ExcavationPoint.ExcavationType excPointType = targetComponent.Type; 
+            targetComponent.Position = go.transform.position; // Excavation point position
+            targetComponent.Type = excPointType;             // Excavation point type
+            
+            excavationPointsList.Add(targetComponent);
+            targetQueue.Enqueue(targetComponent);
         }
         
-        excavationPointsList.Add(chargingStationPosition);
-        targetQueue.Enqueue(chargingStationPosition);
+        // Adding charging station as last target
+        excavationPointsList.Add(chargingStation);
+        targetQueue.Enqueue(chargingStation);
         
         Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
@@ -80,7 +88,7 @@ public class ExplorerController : GenericRobotController
         // Clear the queue and reload excavation points for continuous operation
         targetQueue.Clear();
 
-        foreach (Vector3 point in excavationPointsList)
+        foreach (MapTarget point in excavationPointsList)
         {
             targetQueue.Enqueue(point);
         }
@@ -105,6 +113,9 @@ public class ExplorerController : GenericRobotController
             return;
         }
 
+        ExcavationPoint excPoint = (ExcavationPoint)currentTarget;
+
+        Debug.Log("Excavation Point type: "+excPoint.Type);
         // Normal mission point reached - continue to next target
         StartNextTarget();
     }
@@ -143,14 +154,15 @@ public class ExplorerController : GenericRobotController
             }
         }
 
-        Vector3 nextTarget = targetQueue.Peek();
+        MapTarget nextTarget = targetQueue.Peek();
+        Vector3 positionNextTarget = nextTarget.Position;
 
         // Calculate cost to next target
-        float distanceToTarget = Vector3.Distance(transform.position, nextTarget);
+        float distanceToTarget = Vector3.Distance(transform.position, positionNextTarget);
         float costToTarget = distanceToTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
 
         // Calculate cost to return to charging station from next target
-        float distanceToChargingFromTarget = Vector3.Distance(nextTarget, chargingStationPosition);
+        float distanceToChargingFromTarget = Vector3.Distance(positionNextTarget, chargingStationPosition);
         float costToChargingFromTarget = distanceToChargingFromTarget * batterySimulator.dischargePerMeter * safetyCostMultiplier;
 
         // Total cost: go to target + return to charging
@@ -162,7 +174,8 @@ public class ExplorerController : GenericRobotController
             // Sufficient battery - proceed with mission
             currentTarget = targetQueue.Dequeue();
             isChargingMission = false;
-            PublishTarget(currentTarget);
+            Vector3 positionCurrentTarget = currentTarget.Position;
+            PublishTarget(positionCurrentTarget);
 
             Debug.Log($"<color=cyan>Starting mission to {currentTarget}. Battery: {batterySimulator.currentCharge:F1}% | Cost: {totalCost:F1}%</color>");
         }
@@ -189,7 +202,7 @@ public class ExplorerController : GenericRobotController
 
             isChargingMission = true;
             isReturningToBase = true;
-            currentTarget = chargingStationPosition;
+            currentTarget = chargingStation;
             PublishTarget(chargingStationPosition);
         }
     }

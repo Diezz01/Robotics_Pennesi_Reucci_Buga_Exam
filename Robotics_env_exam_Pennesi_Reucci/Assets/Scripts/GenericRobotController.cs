@@ -26,7 +26,7 @@ public abstract class GenericRobotController : MonoBehaviour
 
     protected List<Vector3> currentPath = new List<Vector3>(); // path from the current position of the robot to the target
     protected int currentPathIndex = 0;
-    protected Vector3 currentTarget;
+    protected MapTarget currentTarget;
 
     public string topicNameTarget = "/target";
     public string topicNamePath = "/astar_path";
