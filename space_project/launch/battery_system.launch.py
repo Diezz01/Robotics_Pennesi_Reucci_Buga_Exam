@@ -86,6 +86,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'ROS_IP': '0.0.0.0',  # Listen on all interfaces
+            #'ROS_IP': '192.168.1.13',  # Listen on all interfaces
             'ROS_TCP_PORT': 10000
         }]
     )

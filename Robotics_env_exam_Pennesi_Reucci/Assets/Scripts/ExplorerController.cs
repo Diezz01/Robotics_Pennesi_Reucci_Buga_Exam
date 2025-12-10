@@ -65,7 +65,10 @@ public class ExplorerController : GenericRobotController
             targetQueue.Enqueue(pos);
             Debug.Log("Excavation point added: " + pos);
         }
-
+        
+        excavationPointsList.Add(chargingStationPosition);
+        targetQueue.Enqueue(chargingStationPosition);
+        
         Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
 
