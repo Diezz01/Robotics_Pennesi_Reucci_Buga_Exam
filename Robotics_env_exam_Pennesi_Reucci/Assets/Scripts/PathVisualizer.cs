@@ -11,8 +11,19 @@ public class PathVisualizerROS : MonoBehaviour
 
     void Start()
     {
+        // Auto-detect robot index from parent ExplorerController
+        ExplorerController controller = GetComponentInParent<ExplorerController>();
+        if (controller != null)
+        {
+            topicName = $"/tb3_{controller.robotIndex}/astar_path";
+            Debug.Log($"<color=cyan>PathVisualizer subscribing to {topicName}</color>");
+        }
+        else
+        {
+            Debug.LogWarning("PathVisualizer: Could not find ExplorerController. Using default topic.");
+        }
+
         ros = ROSConnection.GetOrCreateInstance();
-       // Debug.Log("SUBSCRIBING TO /astar_path...");
         ros.Subscribe<PathMsg>(topicName, ReceivePath);
     }
 

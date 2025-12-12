@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class ExcavationPoint : MapTarget
+public class ExcavationPoint : MonoBehaviour
 {
     public enum ExcavationType
     {
@@ -10,5 +10,6 @@ public class ExcavationPoint : MapTarget
     }
 
     public ExcavationType Type;
+    public Vector3 Position; // Position property from MapTarget
 
 }

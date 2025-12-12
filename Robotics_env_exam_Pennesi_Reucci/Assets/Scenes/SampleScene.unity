@@ -1746,8 +1746,8 @@ Transform:
   m_GameObject: {fileID: 1881593233}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 27, y: 0, z: -38}
-  m_LocalScale: {x: 33.11, y: 8, z: 18}
+  m_LocalPosition: {x: 27, y: 0, z: -42.3}
+  m_LocalScale: {x: 32.03, y: 8, z: 18}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -2187,13 +2187,14 @@ MonoBehaviour:
   angularSpeed: 180
   reachThreshold: 0.5
   robotId: explorer
+  robotIndex: 0
   batterySimulator: {fileID: 1989951310}
   chargingStationPosition: {x: 12, y: 0, z: -38}
   chargedThreshold: 95
   safetyCostMultiplier: 1.2
   topicNameTarget: /target
   topicNamePath: /astar_path
-  continuousOperation: 0
+  continuousOperation: 1
 --- !u!1 &1993285235
 GameObject:
   m_ObjectHideFlags: 0

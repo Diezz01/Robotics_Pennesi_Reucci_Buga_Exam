@@ -58,6 +58,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     [Tooltip("Spawn rocks on Start")]
     public bool spawnOnStart = true;
 
+    [Tooltip("Number of robots to spawn (1-6). Set to 0 for random.")]
+    [Range(0, 6)]
+    public int numberOfRobots = 0;
+
     [Tooltip("Parent spawned rocks under this transform")]
     public Transform rocksParent;
     //////////////
@@ -95,7 +99,8 @@ public class OccupancyGridGenerator : MonoBehaviour
     void Start()
     {
         PoseArrayMsg msgTargets = new PoseArrayMsg();
-        int numRobots = Random.Range(1, chargingPoints.Length + 1);
+        // Use specified number of robots, or random if numberOfRobots is 0
+        int numRobots = (numberOfRobots > 0) ? Mathf.Clamp(numberOfRobots, 1, chargingPoints.Length) : Random.Range(1, chargingPoints.Length + 1);
 
         if (spawnOnStart)
         {

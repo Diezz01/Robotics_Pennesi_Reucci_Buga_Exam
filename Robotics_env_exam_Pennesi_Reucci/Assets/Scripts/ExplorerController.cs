@@ -40,13 +40,21 @@ public class ExplorerController : GenericRobotController
         ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
     }
 
+    private bool hasStartedMission = false;
+
     // Update is called once per frame
     void Update()
     {
         if (excavationPointsList.Count == 0)
         {
             GetExcavationPoints();
-            StartNextTarget();
+            // Don't start immediately - wait a bit for map to be published
+            if (!hasStartedMission)
+            {
+                StartCoroutine(DelayedMissionStart());
+                hasStartedMission = true;
+            }
+            return;
         }
 
         // Check if charging is complete
@@ -66,6 +74,19 @@ public class ExplorerController : GenericRobotController
     }
 
     // -----------------------------
+    // DELAYED MISSION START
+    // -----------------------------
+    IEnumerator DelayedMissionStart()
+    {
+        // Wait for map to be generated and published
+        Debug.Log($"<color=yellow>Robot {robotId}: Waiting for map to be published...</color>");
+        yield return new WaitForSeconds(2f); // Wait 2 seconds for map
+
+        Debug.Log($"<color=lime>Robot {robotId}: Starting navigation!</color>");
+        StartNextTarget();
+    }
+
+    // -----------------------------
     // LOAD EXCAVATION POINTS
     // -----------------------------
     private void GetExcavationPoints()
@@ -74,16 +95,18 @@ public class ExplorerController : GenericRobotController
 
         foreach (GameObject go in trovati)
         {
-            ExcavationPoint targetComponent = go.GetComponent<ExcavationPoint>();
+            ExcavationPoint component = go.GetComponent<ExcavationPoint>();
 
-            ExcavationPoint.ExcavationType excPointType = targetComponent.Type; 
-            targetComponent.Position = go.transform.position; // Excavation point position
-            targetComponent.Type = excPointType;             // Excavation point type
-            
-            excavationPointsList.Add(targetComponent);
-            targetQueue.Enqueue(targetComponent);
+            // Create data wrapper for navigation
+            ExcavationPointTarget target = new ExcavationPointTarget(
+                go.transform.position,
+                component.Type
+            );
+
+            excavationPointsList.Add(target);
+            targetQueue.Enqueue(target);
         }
-        
+
         Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
 
@@ -120,9 +143,11 @@ public class ExplorerController : GenericRobotController
             return;
         }
 
-        ExcavationPoint excPoint = (ExcavationPoint)currentTarget;
-
-        Debug.Log("Excavation Point type: "+excPoint.Type);
+        // Log excavation point type if it's an excavation target
+        if (currentTarget is ExcavationPointTarget excPoint)
+        {
+            Debug.Log($"<color=cyan>Excavation Point type: {excPoint.Type}</color>");
+        }
         // Normal mission point reached - continue to next target
         StartNextTarget();
     }
