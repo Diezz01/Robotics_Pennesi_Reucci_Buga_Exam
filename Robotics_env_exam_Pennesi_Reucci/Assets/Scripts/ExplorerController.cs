@@ -73,10 +73,6 @@ public class ExplorerController : GenericRobotController
             targetQueue.Enqueue(targetComponent);
         }
         
-        // Adding charging station as last target
-        excavationPointsList.Add(chargingStation);
-        targetQueue.Enqueue(chargingStation);
-        
         Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
     }
 
