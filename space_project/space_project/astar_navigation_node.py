@@ -66,25 +66,45 @@ class UnityAStarController(Node):
 
         # Service client for path approval (hybrid coordination)
         self.path_approval_client = self.create_client(PathApproval, '/request_path_approval')
-        self.get_logger().info('Waiting for path approval service...')
-        while not self.path_approval_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Path approval service not available, waiting...')
-        self.get_logger().info('Path approval service connected!')
+
+        # Non-blocking check for service availability
+        # Don't block initialization - will check when needed
+        if not self.path_approval_client.wait_for_service(timeout_sec=0.1):
+            self.get_logger().warning('Path approval service not immediately available - will plan without approval if needed')
+        else:
+            self.get_logger().info('Path approval service connected!')
 
     # Unity coordinates (-50:+50) to Grid indices
     def unity_to_grid(self, x, y):
-        grid_x = int((x + 50) * self.map_row / 100)
-        grid_y = int((y + 50) * self.map_col / 100)
-        # Clamp for safety
+        cell_size = 1
+        local_x = x - (-50)
+        local_y = y - (-50)
+
+        # indici della cella
+        grid_x = int(local_x // cell_size)
+        grid_y = int(local_y // cell_size)
+
+        # inverti l'asse Y per adattarsi alla griglia
+        grid_y = self.map_col - 1 - grid_y
+
+        # clamp per non uscire dai limiti
         grid_x = max(0, min(self.map_row - 1, grid_x))
         grid_y = max(0, min(self.map_col - 1, grid_y))
-        return grid_x, grid_y
 
-    # Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
-    def grid_to_unity(self, i, j):
-        x_unity = (i / self.map_row) * 100 - 50
-        y_unity = (j / self.map_col) * 100 - 50
-        return x_unity, y_unity
+        return (grid_y, grid_x)
+
+        # Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
+    def grid_to_unity(self, grid_y, grid_x):
+        # Inverti l'asse Y
+        cell_size = 1
+        local_y = (self.map_col - 1 - grid_y) * cell_size
+        local_x = grid_x * cell_size
+
+        # Centro della cella
+        x_world = (-50) + local_x + cell_size / 2
+        y_world = (-50) + local_y + cell_size / 2
+
+        return (x_world, y_world)
 
     def is_valid(self, row, col):
         return 0 <= row < self.map_row and 0 <= col < self.map_col
@@ -288,52 +308,58 @@ class UnityAStarController(Node):
 
         self.get_logger().info(f'{robot_name}: Path request from {src} to {dest}')
 
-        # === HYBRID APPROACH: Request path approval before planning ===
-        approval = self.request_path_approval(robot_idx, src, dest)
-
-        if not approval['approved']:
-            self.get_logger().warning(
-                f'{robot_name}: Path NOT approved - {approval["reason"]}. '
-                f'Suggested wait: {approval["wait_time"]}s'
-            )
-            # Don't plan path - robot will retry after waiting
+        # === HYBRID APPROACH: Request path approval before planning (NON-BLOCKING) ===
+        # Check if service is ready (non-blocking)
+        if not self.path_approval_client.service_is_ready():
+            self.get_logger().warning(f'{robot_name}: Path approval service not ready - planning without approval')
+            # Service not available - plan path immediately as fallback
+            path = self.a_star_search(src, dest)
+            if path:
+                self.publish_path(path, robot_idx)
+            else:
+                self.get_logger().error(f'{robot_name}: Failed to find path')
             return
 
-        self.get_logger().info(f'{robot_name}: Path APPROVED - {approval["reason"]}')
-
-        # Compute path
-        path = self.a_star_search(src, dest)
-
-        # Publish to this robot's specific path topic
-        if path:
-            self.publish_path(path, robot_idx)
-        else:
-            self.get_logger().error(f'{robot_name}: Failed to find path')
-
-    def request_path_approval(self, robot_id, src, dest):
-        """Call path approval service (predictive coordination)"""
+        # Service is ready - call it asynchronously with callback
         request = PathApproval.Request()
-        request.robot_id = robot_id
+        request.robot_id = robot_idx
         request.start_x = float(src[0])
         request.start_y = float(src[1])
         request.goal_x = float(dest[0])
         request.goal_y = float(dest[1])
 
-        # Synchronous service call
+        # Async call with callback - doesn't block
         future = self.path_approval_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        future.add_done_callback(lambda f: self.handle_path_approval_response(f, robot_idx, src, dest))
 
-        if future.result() is not None:
+    def handle_path_approval_response(self, future, robot_idx, src, dest):
+        """Handle async path approval response"""
+        robot_name = f'tb3_{robot_idx}'
+
+        try:
             response = future.result()
-            return {
-                'approved': response.approved,
-                'wait_time': response.wait_time,
-                'reason': response.reason
-            }
-        else:
-            # Service call failed - approve by default to avoid blocking
-            self.get_logger().warning('Path approval service call failed - approving by default')
-            return {'approved': True, 'wait_time': 0.0, 'reason': 'Service unavailable'}
+            if response.approved:
+                self.get_logger().info(f'{robot_name}: Path APPROVED - {response.reason}')
+                # Compute and publish path
+                path = self.a_star_search(src, dest)
+                if path:
+                    self.publish_path(path, robot_idx)
+                else:
+                    self.get_logger().error(f'{robot_name}: Failed to find path')
+            else:
+                self.get_logger().warning(
+                    f'{robot_name}: Path NOT approved - {response.reason}. '
+                    f'Suggested wait: {response.wait_time}s'
+                )
+                # Path rejected - robot will retry later
+        except Exception as e:
+            # Service call failed - plan anyway as fallback
+            self.get_logger().warning(f'{robot_name}: Service call failed ({e}) - planning without approval')
+            path = self.a_star_search(src, dest)
+            if path:
+                self.publish_path(path, robot_idx)
+            else:
+                self.get_logger().error(f'{robot_name}: Failed to find path')
 
     # OLD SINGLE-ROBOT CALLBACK - Kept for reference but not used
     # def target_explorer_callback(self, msg):
