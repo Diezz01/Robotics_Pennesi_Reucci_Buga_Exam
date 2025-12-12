@@ -281,7 +281,7 @@ public class OccupancyGridGenerator : MonoBehaviour
                 Mathf.Round(pos.z)
             );
 
-        } while (IsInsideForbiddenArea(pos));  // RIGENERA se è dentro l’area proibita
+        } while (IsInsideForbiddenArea(pos));  // RIGENERA se ï¿½ dentro lï¿½area proibita
 
         return pos;
     }
@@ -354,6 +354,20 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         GameObject spawnedExcPoint = Instantiate(excPointPrefab, randomPosition, rotation, excPointParent);
         spawnedExcPoint.tag = "ExcavationPoint";
+
+        ExcavationPoint excPointScript = spawnedExcPoint.GetComponent<ExcavationPoint>();
+
+        if (excPointScript != null)
+        {
+            var values = System.Enum.GetValues(typeof(ExcavationPoint.ExcavationType));
+
+            excPointScript.Type = (ExcavationPoint.ExcavationType)
+                                values.GetValue(Random.Range(0, values.Length));
+
+            excPointScript.Position = randomPosition;
+
+            Debug.Log($"<color=green>Generated Excavation Point Type: {excPointScript.Type} | Pos: {randomPosition}</color>");
+        }
 
         return randomPosition;
     }

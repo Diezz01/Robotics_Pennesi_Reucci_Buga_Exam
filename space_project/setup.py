@@ -11,7 +11,6 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name+'/launch', [
-            'launch/multi_robots.launch.py',
             'launch/battery_system.launch.py'
         ]),
     ],

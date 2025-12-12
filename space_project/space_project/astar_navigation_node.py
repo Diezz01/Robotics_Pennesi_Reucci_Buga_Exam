@@ -23,32 +23,13 @@ class UnityAStarController(Node):
         self.target_explorer_sub = self.create_subscription(PoseArray, '/target', self.target_explorer_callback,10)
         self.path_pub = self.create_publisher(Path, '/astar_path', 10)
 
-      #  self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
-       # self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
-
+        #self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
+        #self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
 
         self.map_data = None
         self.start = None
         self.robots_list = None
         self.targets_list = None
-        #self.src = (49, 49)  # Unity coordinates in meters
-        #self.dest = (40, 40)   # Unity coordinates in meters
-
-        self.declare_parameter('src_x', 49.0)
-        self.declare_parameter('src_y', 49.0)
-        self.declare_parameter('dest_x', 40.0)
-        self.declare_parameter('dest_y', 40.0)
-
-        self.src = (
-            float(self.get_parameter('src_x').value),
-            float(self.get_parameter('src_y').value)
-        )
-        self.dest = (
-            float(self.get_parameter('dest_x').value),
-            float(self.get_parameter('dest_y').value)
-        )
-
-        self.get_logger().info(f"Robot starting at src={self.src} going to dest={self.dest}")
 
         self.path = []
         self.current_index = 0
@@ -56,9 +37,8 @@ class UnityAStarController(Node):
         self.map_row = None
         self.map_col = None
 
-    # Unity -> Grid Conversion
+    # Unity coordinates (-50:+50) to Grid indices
     def unity_to_grid(self, x, y):
-        """Converts Unity coordinates (-50:+50) to grid indices"""
         grid_x = int((x + 50) * self.map_row / 100)
         grid_y = int((y + 50) * self.map_col / 100)
         # Clamp for safety
@@ -66,21 +46,17 @@ class UnityAStarController(Node):
         grid_y = max(0, min(self.map_col - 1, grid_y))
         return grid_x, grid_y
 
+    # Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
     def grid_to_unity(self, i, j):
-        """
-        Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
-        """
         x_unity = (i / self.map_row) * 100 - 50
         y_unity = (j / self.map_col) * 100 - 50
         return x_unity, y_unity
-
 
     def is_valid(self, row, col):
         return 0 <= row < self.map_row and 0 <= col < self.map_col
     
     def is_unblocked(self, grid, row, col):
-        # 0 = obstacle, 1 = free
-        return grid[row][col] == 0
+        return grid[row][col] == 0  # 0 = obstacle, 1 = free
 
     def is_destination(self, row, col, dest):
         return row == dest[0] and col == dest[1]
@@ -89,7 +65,7 @@ class UnityAStarController(Node):
         return ((row - dest[0]) ** 2 + (col - dest[1]) ** 2) ** 0.5
 
     def trace_path(self, cell_details, dest):
-        print("The Path is:")
+        #print("The Path is:")
         path = []
         row, col = dest
         while not (cell_details[row][col].parent_i == row and cell_details[row][col].parent_j == col):
@@ -98,9 +74,9 @@ class UnityAStarController(Node):
         path.append((row, col))
         path.reverse()
         self.path = path
-        for p in path:
+        '''for p in path:
             print("->", p, end=" ")
-        print()
+        print()'''
 
         return path
 
