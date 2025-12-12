@@ -38,6 +38,7 @@ class BatteryManager(Node):
         # Alert states
         self.low_battery_alert_sent = False
         self.critical_battery_alert_sent = False
+        self.charged_alert_sent = False
 
         # Subscribers
         self.battery_sub = self.create_subscription(
@@ -106,6 +107,8 @@ class BatteryManager(Node):
         elif was_charging and not self.is_charging:
             self.get_logger().info(f'🔋 Charging stopped at {self.battery_level:.1f}%')
             self.publish_alert('INFO', 'Charging stopped')
+            # Allow announcing "charged" again on the next charging cycle.
+            self.charged_alert_sent = False
 
     def check_battery_alerts(self):
         """Check battery level and send alerts"""
@@ -134,7 +137,13 @@ class BatteryManager(Node):
 
         # Charged notification
         if self.battery_level >= self.charged_threshold and self.is_charging:
-            self.get_logger().info(f'✅ Battery charged to {self.battery_level:.1f}%')
+            if not self.charged_alert_sent:
+                self.get_logger().info(f'✅ Battery charged to {self.battery_level:.1f}%')
+                self.charged_alert_sent = True
+        else:
+            # Reset if we drop below the threshold (or stop charging) so we can
+            # announce again after re-reaching the charged threshold.
+            self.charged_alert_sent = False
 
     def publish_battery_metrics(self):
         """Publish battery health metrics periodically"""
