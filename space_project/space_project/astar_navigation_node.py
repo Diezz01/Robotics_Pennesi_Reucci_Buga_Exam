@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped, PoseArray
+from space_project.srv import PathApproval
 import heapq
+import time
 
 # Define the Cell class
 class Cell:
@@ -56,6 +58,13 @@ class UnityAStarController(Node):
         self.map_row = 0
         self.map_col = 0
         self.resolution = 0.0
+
+        # Service client for path approval (hybrid coordination)
+        self.path_approval_client = self.create_client(PathApproval, '/request_path_approval')
+        self.get_logger().info('Waiting for path approval service...')
+        while not self.path_approval_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Path approval service not available, waiting...')
+        self.get_logger().info('Path approval service connected!')
 
     # Unity coordinates (-50:+50) to Grid indices
     def unity_to_grid(self, x, y):
@@ -253,6 +262,19 @@ class UnityAStarController(Node):
 
         self.get_logger().info(f'{robot_name}: Path request from {src} to {dest}')
 
+        # === HYBRID APPROACH: Request path approval before planning ===
+        approval = self.request_path_approval(robot_idx, src, dest)
+
+        if not approval['approved']:
+            self.get_logger().warning(
+                f'{robot_name}: Path NOT approved - {approval["reason"]}. '
+                f'Suggested wait: {approval["wait_time"]}s'
+            )
+            # Don't plan path - robot will retry after waiting
+            return
+
+        self.get_logger().info(f'{robot_name}: Path APPROVED - {approval["reason"]}')
+
         # Compute path
         path = self.a_star_search(src, dest)
 
@@ -261,6 +283,31 @@ class UnityAStarController(Node):
             self.publish_path(path, robot_idx)
         else:
             self.get_logger().error(f'{robot_name}: Failed to find path')
+
+    def request_path_approval(self, robot_id, src, dest):
+        """Call path approval service (predictive coordination)"""
+        request = PathApproval.Request()
+        request.robot_id = robot_id
+        request.start_x = float(src[0])
+        request.start_y = float(src[1])
+        request.goal_x = float(dest[0])
+        request.goal_y = float(dest[1])
+
+        # Synchronous service call
+        future = self.path_approval_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+
+        if future.result() is not None:
+            response = future.result()
+            return {
+                'approved': response.approved,
+                'wait_time': response.wait_time,
+                'reason': response.reason
+            }
+        else:
+            # Service call failed - approve by default to avoid blocking
+            self.get_logger().warning('Path approval service call failed - approving by default')
+            return {'approved': True, 'wait_time': 0.0, 'reason': 'Service unavailable'}
 
     # OLD SINGLE-ROBOT CALLBACK - Kept for reference but not used
     # def target_explorer_callback(self, msg):

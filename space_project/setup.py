@@ -29,6 +29,7 @@ setup(
         'console_scripts': [
             'astar_navigation_node = space_project.astar_navigation_node:main',
             'battery_manager = space_project.battery_manager:main',
+            'collision_coordinator_node = space_project.collision_coordinator_node:main',
         ],
     },
 )

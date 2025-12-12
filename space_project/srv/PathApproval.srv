@@ -1,0 +1,11 @@
+# Request
+int32 robot_id              # Robot requesting path approval (e.g., 0 for tb3_0)
+float64 start_x             # Start position X
+float64 start_y             # Start position Y (2D, ignoring Z)
+float64 goal_x              # Goal position X
+float64 goal_y              # Goal position Y
+---
+# Response
+bool approved               # True if path is approved, False if robot should wait
+float32 wait_time           # Suggested wait time in seconds (0 if approved immediately)
+string reason               # Explanation (e.g., "Path clear", "Collision with tb3_2")

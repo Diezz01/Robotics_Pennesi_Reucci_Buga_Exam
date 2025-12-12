@@ -72,6 +72,19 @@ def generate_launch_description():
         ]
     )
 
+    # Collision Coordinator Node (Hybrid: Topics + Service)
+    collision_coordinator_node = Node(
+        package='space_project',
+        executable='collision_coordinator_node',
+        name='collision_coordinator',
+        output='screen',
+        parameters=[{
+            'num_robots': num_robots,
+            'safe_distance': 3.0,      # Minimum distance between robots (meters)
+            'path_buffer': 2.0         # Buffer for path planning conflicts
+        }]
+    )
+
     # Battery Manager Node
     battery_manager_node = Node(
         package='space_project',
@@ -135,5 +148,6 @@ def generate_launch_description():
         # Nodes
         ros_tcp_endpoint,
         astar_navigation_node,
+        collision_coordinator_node,
         battery_manager_node,
     ])
