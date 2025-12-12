@@ -16,15 +16,23 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PathApproval.srv"
 )
 
-# Install Python package
-ament_python_install_package(${PROJECT_NAME})
-
 # Install Python executables
 install(PROGRAMS
   space_project/astar_navigation_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME astar_navigation_node
+)
+
+install(PROGRAMS
   space_project/battery_manager.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME battery_manager
+)
+
+install(PROGRAMS
   space_project/collision_coordinator_node.py
   DESTINATION lib/${PROJECT_NAME}
+  RENAME collision_coordinator_node
 )
 
 # Install launch files
