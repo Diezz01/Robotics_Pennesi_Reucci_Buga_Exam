@@ -1,4 +1,5 @@
 using RosMessageTypes.Nav;
+using System.Collections;
 using System.IO;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
@@ -92,8 +93,7 @@ public class OccupancyGridGenerator : MonoBehaviour
     OccupancyGridMsg msg;
 
     void Start()
-    {   
-        PoseArrayMsg msgRobots = new PoseArrayMsg();
+    {
         PoseArrayMsg msgTargets = new PoseArrayMsg();
         int numRobots = Random.Range(1, chargingPoints.Length + 1);
 
@@ -104,13 +104,28 @@ public class OccupancyGridGenerator : MonoBehaviour
             msgTargets = SpawnExcavationPoints(numRobots);
         }
 
+        // Start coroutine to generate grid after physics update
+        StartCoroutine(GenerateAndPublishMapAfterPhysics(numRobots, msgTargets));
+    }
+
+    IEnumerator GenerateAndPublishMapAfterPhysics(int numRobots, PoseArrayMsg msgTargets)
+    {
+        // Wait for FixedUpdate (physics cycle) to process colliders
+        yield return new WaitForFixedUpdate();
+
+        // Wait one more frame for safety
+        yield return null;
+
+        Debug.Log("<color=yellow>Generating occupancy grid after physics update...</color>");
+
+        // Initialize ROS connection
         ros = ROSConnection.GetOrCreateInstance();
         ros.RegisterPublisher<OccupancyGridMsg>(topicName);
         ros.RegisterPublisher<PoseArrayMsg>(topicRobotsName);
         ros.RegisterPublisher<PoseArrayMsg>(topicTargetsName);
 
+        // Generate occupancy grid
         int[,] grid = new int[mapWidth, mapHeight];
-
         Vector3 origin = transform.position - new Vector3(mapWidth, 0, mapHeight) * cellSize * 0.5f;
 
         for (int x = 0; x < mapWidth; x++)
@@ -121,11 +136,11 @@ public class OccupancyGridGenerator : MonoBehaviour
 
                 if (Physics.CheckBox(cellCenter, new Vector3(cellSize / 2, heightCheck / 2, cellSize / 2), Quaternion.identity, obstacleLayer))
                 {
-                    grid[x, y] = 1; // occupata
+                    grid[x, y] = 1; // occupied
                 }
                 else
                 {
-                    grid[x, y] = 0;   // libera
+                    grid[x, y] = 0;   // free
                 }
             }
         }
@@ -133,6 +148,18 @@ public class OccupancyGridGenerator : MonoBehaviour
         //SavePGM(grid);
         //SaveYAML();
 
+        // Count obstacles for verification
+        int obstacleCount = 0;
+        for (int x = 0; x < mapWidth; x++)
+            for (int y = 0; y < mapHeight; y++)
+                if (grid[x, y] == 1) obstacleCount++;
+
+        Debug.Log($"<color=cyan>Grid Generated: {obstacleCount} obstacle cells detected " +
+                  $"out of {mapWidth * mapHeight} total cells " +
+                  $"({(float)obstacleCount/(mapWidth*mapHeight)*100:F1}%)</color>");
+        Debug.Log($"<color=cyan>Rocks spawned: {numberOfRocks} | Layer mask: {obstacleLayer.value}</color>");
+
+        // Create occupancy grid message
         msg = new OccupancyGridMsg();
         msg.info.resolution = cellSize;
         msg.info.width = (uint)mapWidth;
@@ -147,25 +174,26 @@ public class OccupancyGridGenerator : MonoBehaviour
             for (int x = 0; x < mapWidth; x++)
                 msg.data[y * mapWidth + x] = (sbyte)grid[x, y];
 
+        // Publish map
         ros.Publish(topicName, msg);
 
-        // crea un array di PoseMsg della dimensione corretta
+        // Create and publish robot poses
+        PoseArrayMsg msgRobots = new PoseArrayMsg();
         msgRobots.poses = new PoseMsg[numRobots];
 
-        // riempi il PoseArrayMsg con le prime numRobots coordinate
         for (int i = 0; i < numRobots; i++)
         {
             Vector3 point = chargingPoints[i];
             msgRobots.poses[i] = new PoseMsg(
                 new PointMsg(point.x, point.y, point.z),      // POSITION
-                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION fissa
+                new QuaternionMsg(0.0, 0.0, 0.0, 1.0)        // ORIENTATION
             );
         }
 
         ros.Publish(topicRobotsName, msgRobots);
         ros.Publish(topicTargetsName, msgTargets);
 
-        Debug.Log("Map: Published");
+        Debug.Log("<color=green>Map: Published</color>");
     }
 
     void SavePGM(int[,] grid)
@@ -218,15 +246,33 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         for (int i = 0; i < numRobots; i++)
         {
-            SpawnSingleRobot(chargingPoints[i]);
+            SpawnSingleRobot(chargingPoints[i], i); // Pass robot index
         }
 
-        Debug.Log($"RobotSpawner: Spawned {numRobots} robot.");
+        Debug.Log($"RobotSpawner: Spawned {numRobots} robots.");
     }
 
-    private void SpawnSingleRobot(Vector3 position)
+    private void SpawnSingleRobot(Vector3 position, int robotIndex)
     {
-        Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+        GameObject robot = Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+        robot.name = $"tb3_{robotIndex}"; // Name the GameObject
+
+        // Configure robot components with unique ID
+        ExplorerController controller = robot.GetComponent<ExplorerController>();
+        if (controller != null)
+        {
+            controller.robotId = $"tb3_{robotIndex}";
+            controller.robotIndex = robotIndex; // Store index for topic naming
+        }
+
+        BatterySimulator battery = robot.GetComponent<BatterySimulator>();
+        if (battery != null)
+        {
+            battery.batteryTopic = $"/tb3_{robotIndex}/battery_state";
+            battery.chargingStateTopic = $"/tb3_{robotIndex}/charging_status";
+        }
+
+        Debug.Log($"<color=green>Spawned robot tb3_{robotIndex} at {position}</color>");
     }
 
     /// <summary>
@@ -306,11 +352,17 @@ public class OccupancyGridGenerator : MonoBehaviour
             spawnedRock.transform.localScale *= randomScale;
         }
 
-        if (spawnedRock.GetComponent<MeshCollider>() == null)
+        // EXPLICIT LAYER CONFIGURATION
+        spawnedRock.layer = 0; // Ensure rocks are on Default layer (Layer 0)
+
+        // ENSURE MESH COLLIDER EXISTS AND IS ENABLED
+        MeshCollider meshCollider = spawnedRock.GetComponent<MeshCollider>();
+        if (meshCollider == null)
         {
-            MeshCollider meshCollider = spawnedRock.AddComponent<MeshCollider>();
-            meshCollider.convex = true;
+            meshCollider = spawnedRock.AddComponent<MeshCollider>();
         }
+        meshCollider.convex = true;
+        meshCollider.enabled = true; // Explicitly enable
     }
 
 
@@ -406,6 +458,43 @@ public class OccupancyGridGenerator : MonoBehaviour
         Vector3 center = (minPosition + maxPosition) / 2f;
         Vector3 size = maxPosition - minPosition;
         Gizmos.DrawWireCube(center, size);
+    }
+
+    // Visualize occupancy grid obstacles
+    void OnDrawGizmos()
+    {
+        // Early return if map not yet generated
+        if (msg == null || msg.data == null || msg.data.Length == 0) return;
+
+        // Verify data array size matches expected grid size
+        int expectedSize = mapWidth * mapHeight;
+        if (msg.data.Length != expectedSize) return;
+
+        Vector3 origin = transform.position - new Vector3(mapWidth, 0, mapHeight) * cellSize * 0.5f;
+
+        // Sample every 2nd cell for performance
+        for (int x = 0; x < mapWidth; x += 2)
+        {
+            for (int y = 0; y < mapHeight; y += 2)
+            {
+                int index = y * mapWidth + x;
+
+                // Additional bounds check
+                if (index >= msg.data.Length) continue;
+
+                if (msg.data[index] == 1) // Only draw obstacles
+                {
+                    Vector3 cellCenter = origin + new Vector3(
+                        x * cellSize + cellSize / 2,
+                        0.2f,
+                        y * cellSize + cellSize / 2
+                    );
+
+                    Gizmos.color = new Color(1f, 0f, 0f, 0.5f); // Red semi-transparent
+                    Gizmos.DrawCube(cellCenter, new Vector3(cellSize * 0.9f, 0.2f, cellSize * 0.9f));
+                }
+            }
+        }
     }
 
 

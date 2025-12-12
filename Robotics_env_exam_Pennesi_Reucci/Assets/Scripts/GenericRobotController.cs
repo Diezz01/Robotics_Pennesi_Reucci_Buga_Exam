@@ -13,6 +13,7 @@ public abstract class GenericRobotController : MonoBehaviour
     public float angularSpeed = 180f;     // degree/second
     public float reachThreshold = 0.5f;  // minimum distance to say that a target is reached
     public string robotId = string.Empty;
+    public int robotIndex = 0; // Set by MapGenerator during spawn
 
     [Header("Battery Management")]
     public BatterySimulator batterySimulator; // Direct reference to battery

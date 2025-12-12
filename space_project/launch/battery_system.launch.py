@@ -44,12 +44,19 @@ def generate_launch_description():
         description='Interval (seconds) for publishing battery health metrics'
     )
 
+    num_robots_arg = DeclareLaunchArgument(
+        'num_robots',
+        default_value='6',
+        description='Number of robots in the simulation'
+    )
+
     # Get launch configuration values
     robot_name = LaunchConfiguration('robot_name')
     low_battery_threshold = LaunchConfiguration('low_battery_threshold')
     critical_battery_threshold = LaunchConfiguration('critical_battery_threshold')
     charged_threshold = LaunchConfiguration('charged_threshold')
     metrics_interval = LaunchConfiguration('publish_metrics_interval')
+    num_robots = LaunchConfiguration('num_robots')
 
     # A* Navigation Node
     astar_navigation_node = Node(
@@ -57,7 +64,9 @@ def generate_launch_description():
         executable='astar_navigation_node',
         name='astar_navigation',
         output='screen',
-        parameters=[],
+        parameters=[{
+            'num_robots': num_robots
+        }],
         remappings=[
             # Add remappings if needed
         ]
@@ -118,6 +127,7 @@ def generate_launch_description():
         critical_battery_threshold_arg,
         charged_threshold_arg,
         metrics_interval_arg,
+        num_robots_arg,
 
         # Info message
         launch_info,

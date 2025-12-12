@@ -17,25 +17,45 @@ class UnityAStarController(Node):
     def __init__(self):
         super().__init__('unity_astar_controller')
 
+        # Declare parameter for number of robots
+        self.declare_parameter('num_robots', 6)
+        num_robots = self.get_parameter('num_robots').value
 
-
+        # Subscribe to shared map (all robots use same map)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
-        self.target_explorer_sub = self.create_subscription(PoseArray, '/target', self.target_explorer_callback,10)
-        self.path_pub = self.create_publisher(Path, '/astar_path', 10)
 
-        #self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
-        #self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
+        # Create per-robot subscriptions and publishers
+        self.robot_subs = []
+        self.robot_pubs = []
 
-        self.map_data = None
-        self.start = None
-        self.robots_list = None
-        self.targets_list = None
+        for i in range(num_robots):
+            robot_name = f'tb3_{i}'
 
-        self.path = []
-        self.current_index = 0
-        self.resolution = None
-        self.map_row = None
-        self.map_col = None
+            # Subscribe to this robot's target requests
+            target_sub = self.create_subscription(
+                PoseArray,
+                f'/{robot_name}/target',
+                lambda msg, idx=i: self.target_callback(msg, idx),
+                10
+            )
+            self.robot_subs.append(target_sub)
+
+            # Publisher for this robot's path
+            path_pub = self.create_publisher(
+                Path,
+                f'/{robot_name}/astar_path',
+                10
+            )
+            self.robot_pubs.append(path_pub)
+
+            self.get_logger().info(f'Subscribed to /{robot_name}/target')
+            self.get_logger().info(f'Publishing to /{robot_name}/astar_path')
+
+        # Initialize map data
+        self.map_data = []
+        self.map_row = 0
+        self.map_col = 0
+        self.resolution = 0.0
 
     # Unity coordinates (-50:+50) to Grid indices
     def unity_to_grid(self, x, y):
@@ -56,7 +76,7 @@ class UnityAStarController(Node):
         return 0 <= row < self.map_row and 0 <= col < self.map_col
     
     def is_unblocked(self, grid, row, col):
-        return grid[row][col] == 0  # 0 = obstacle, 1 = free
+        return grid[row][col] == 0  # 0 = free, 1 = obstacle (CORRECTED)
 
     def is_destination(self, row, col, dest):
         return row == dest[0] and col == dest[1]
@@ -138,29 +158,33 @@ class UnityAStarController(Node):
         if not found_dest:
             print("Failed to find the destination cell")
 
-        self.publish_path(path)
+        return path
 
-    def publish_path(self, path):
+    def publish_path(self, path, robot_idx):
+        """Publish path to specific robot's topic"""
+        robot_name = f'tb3_{robot_idx}'
+
         if not path:
-            print("Failed to publish path")
+            self.get_logger().error(f'{robot_name}: Failed to publish path (path is empty)')
             return
+
         path_msg = Path()
+        path_msg.header.stamp = self.get_clock().now().to_msg()
         path_msg.header.frame_id = "map"
+
         for cell in path:
             pose = PoseStamped()
             pose.header.frame_id = "map"
-            app_coord = self.grid_to_unity(cell[0],cell[1])
-            pose.pose.position.x = app_coord[0] 
-            pose.pose.position.y = app_coord[1] 
-            pose.pose.position.z = 0.0 
+            app_coord = self.grid_to_unity(cell[0], cell[1])
+            pose.pose.position.x = app_coord[0]
+            pose.pose.position.y = app_coord[1]
+            pose.pose.position.z = 0.0
             pose.pose.orientation.w = 1.0
             path_msg.poses.append(pose)
-        print("Publishing path")
-        print("\nPATH PUBLISHED (Unity coordinates):")
-        for i, cell in enumerate(path):
-            x_u, y_u = self.grid_to_unity(cell[0], cell[1])
-            print(f"Step {i}: GRID=({cell[0]}, {cell[1]}) -> UNITY=({x_u:.2f}, {y_u:.2f})")
-        self.path_pub.publish(path_msg)
+
+        # Use robot-specific publisher
+        self.robot_pubs[robot_idx].publish(path_msg)
+        self.get_logger().info(f'{robot_name}: Published path with {len(path)} waypoints')
 
     def map_callback(self, msg):
         self.map_row = msg.info.width
@@ -169,22 +193,38 @@ class UnityAStarController(Node):
 
         # Convert map to list of lists
         grid = []
+        obstacle_count = 0
         for row in range(self.map_col):
             row_data = []
             for col in range(self.map_row):
                 index = row * self.map_row + col
                 if msg.data[index] == -1 or msg.data[index] > 0:
                     row_data.append(1)  # obstacle
+                    obstacle_count += 1
                 else:
                     row_data.append(0)  # free
             grid.append(row_data)
 
         self.map_data = grid
 
-        # Print the grid
-        print("Occupancy Grid:")
-        for r in grid:
-            print(''.join(str(c) for c in r))
+        # Enhanced logging
+        total_cells = self.map_row * self.map_col
+        obstacle_percentage = (obstacle_count / total_cells * 100) if total_cells > 0 else 0
+
+        self.get_logger().info('='*60)
+        self.get_logger().info(f'Map received: {self.map_row}x{self.map_col}')
+        self.get_logger().info(f'Resolution: {self.resolution}m per cell')
+        self.get_logger().info(f'Origin: ({msg.info.origin.position.x:.2f}, {msg.info.origin.position.y:.2f})')
+        self.get_logger().info(f'Obstacles: {obstacle_count}/{total_cells} cells ({obstacle_percentage:.1f}%)')
+        self.get_logger().info('='*60)
+
+        # Print grid sample if obstacles detected
+        if obstacle_count > 0:
+            self.get_logger().info('Grid sample (first 30x30, X=obstacle, .=free):')
+            for r in range(min(30, len(grid))):
+                print(''.join('X' if c == 1 else '.' for c in grid[r][:30]))
+        else:
+            self.get_logger().warning('NO OBSTACLES DETECTED! Check Unity obstacle layer configuration.')
 
         # Start A*
         #self.a_star_search()
@@ -199,10 +239,36 @@ class UnityAStarController(Node):
         self.targets_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
         self.get_logger().info(f"Received {len(self.targets_list)} targets at points: {self.targets_list}")
     
-    def target_explorer_callback(self, msg):
-        explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
-        self.get_logger().info(f"Received from explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
-        self.a_star_search(explorer_src_dest[0],explorer_src_dest[1])
+    def target_callback(self, msg, robot_idx):
+        """Handle path request from specific robot"""
+        robot_name = f'tb3_{robot_idx}'
+
+        if len(msg.poses) < 2:
+            self.get_logger().warning(f'{robot_name}: Invalid target message (need 2 poses)')
+            return
+
+        # Extract source and destination
+        src = (msg.poses[0].position.x, msg.poses[0].position.z, msg.poses[0].position.y)
+        dest = (msg.poses[1].position.x, msg.poses[1].position.z, msg.poses[1].position.y)
+
+        self.get_logger().info(f'{robot_name}: Path request from {src} to {dest}')
+
+        # Compute path
+        path = self.a_star_search(src, dest)
+
+        # Publish to this robot's specific path topic
+        if path:
+            self.publish_path(path, robot_idx)
+        else:
+            self.get_logger().error(f'{robot_name}: Failed to find path')
+
+    # OLD SINGLE-ROBOT CALLBACK - Kept for reference but not used
+    # def target_explorer_callback(self, msg):
+    #     explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
+    #     self.get_logger().info(f"Received from explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
+    #     path = self.a_star_search(explorer_src_dest[0], explorer_src_dest[1])
+    #     if path:
+    #         self.publish_path(path, 0)  # Would need robot index
 
 
 def main(args=None):

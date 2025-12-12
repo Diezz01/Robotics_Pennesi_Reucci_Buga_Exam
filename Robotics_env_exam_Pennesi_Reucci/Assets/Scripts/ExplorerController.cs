@@ -21,7 +21,18 @@ public class ExplorerController : GenericRobotController
     // Start is called before the first frame update
     void Start()
     {
-        robotId = "explorer";
+        // If robotId is not set by MapGenerator, use default with index
+        if (string.IsNullOrEmpty(robotId))
+        {
+            robotId = $"tb3_{robotIndex}";
+        }
+
+        // Create namespaced topics per robot
+        topicNameTarget = $"/tb3_{robotIndex}/target";
+        topicNamePath = $"/tb3_{robotIndex}/astar_path";
+
+        Debug.Log($"<color=cyan>Robot {robotId} using topics: {topicNameTarget}, {topicNamePath}</color>");
+
         chargingStationPosition = new Vector3(12f, 0f, -38f);
         chargingStation = new Target(chargingStationPosition);
         ros = ROSConnection.GetOrCreateInstance();
