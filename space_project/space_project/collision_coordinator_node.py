@@ -13,18 +13,22 @@ class CollisionCoordinatorNode(Node):
 
         # Parameters
         self.declare_parameter('num_robots', 6)
-        self.declare_parameter('safe_distance', 3.0)  # Minimum distance between robots
-        self.declare_parameter('path_buffer', 2.0)    # Buffer zone for path planning
+        self.declare_parameter('safe_distance', 4.0)  # Minimum distance between robots (increased for better safety)
+        self.declare_parameter('path_buffer', 3.0)    # Buffer zone for path planning (increased)
+        self.declare_parameter('collision_warning_distance', 6.0)  # Early warning distance
 
         self.num_robots = self.get_parameter('num_robots').value
         self.safe_distance = self.get_parameter('safe_distance').value
         self.path_buffer = self.get_parameter('path_buffer').value
+        self.warning_distance = self.get_parameter('collision_warning_distance').value
 
         # Robot state tracking
         self.robot_positions = {}  # {robot_id: (x, y, timestamp)}
+        self.robot_velocities = {}  # {robot_id: (vx, vy)} for predictive collision
         self.robot_goals = {}      # {robot_id: (goal_x, goal_y)}
         self.collision_states = {}  # {robot_id: bool}
         self.robot_priorities = {}  # {robot_id: priority_score}
+        self.previous_positions = {}  # For velocity calculation
 
         # === TOPICS: Real-time position sharing ===
         self.pose_subs = []
@@ -73,12 +77,26 @@ class CollisionCoordinatorNode(Node):
         x = msg.pose.position.x
         y = msg.pose.position.y
         timestamp = self.get_clock().now()
+        
+        # Calculate velocity from position change
+        if robot_id in self.robot_positions:
+            prev_pos = self.robot_positions[robot_id]
+            prev_time = prev_pos[2]
+            dt = (timestamp - prev_time).nanoseconds / 1e9
+            if dt > 0.01:  # Avoid division by near-zero
+                vx = (x - prev_pos[0]) / dt
+                vy = (y - prev_pos[1]) / dt
+                self.robot_velocities[robot_id] = (vx, vy)
+        
         self.robot_positions[robot_id] = (x, y, timestamp)
 
     def check_real_time_collisions(self):
-        """REACTIVE: Check for imminent collisions between moving robots"""
+        """REACTIVE: Check for imminent collisions between moving robots with predictive detection"""
         robot_ids = list(self.robot_positions.keys())
         new_collision_states = {idx: False for idx in robot_ids}
+
+        # Prediction time horizon (seconds)
+        prediction_time = 1.0
 
         # Check each robot pair
         for i in range(len(robot_ids)):
@@ -91,10 +109,27 @@ class CollisionCoordinatorNode(Node):
                 pos1 = self.robot_positions[id1]
                 pos2 = self.robot_positions[id2]
 
-                # 2D distance (ignoring height)
-                distance = math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+                # Current 2D distance
+                current_distance = math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 
-                if distance < self.safe_distance:
+                # Predictive collision check using velocities
+                predicted_distance = current_distance
+                if id1 in self.robot_velocities and id2 in self.robot_velocities:
+                    v1 = self.robot_velocities[id1]
+                    v2 = self.robot_velocities[id2]
+                    
+                    # Predict positions
+                    pred_x1 = pos1[0] + v1[0] * prediction_time
+                    pred_y1 = pos1[1] + v1[1] * prediction_time
+                    pred_x2 = pos2[0] + v2[0] * prediction_time
+                    pred_y2 = pos2[1] + v2[1] * prediction_time
+                    
+                    predicted_distance = math.sqrt((pred_x1 - pred_x2)**2 + (pred_y1 - pred_y2)**2)
+
+                # Check both current and predicted distance
+                min_distance = min(current_distance, predicted_distance)
+                
+                if min_distance < self.safe_distance:
                     # Collision imminent! Determine who should stop
                     # Lower priority robot stops
                     if self.robot_priorities[id1] < self.robot_priorities[id2]:
@@ -105,8 +140,14 @@ class CollisionCoordinatorNode(Node):
                     if not (self.collision_states.get(id1) and self.collision_states.get(id2)):
                         self.get_logger().warning(
                             f'COLLISION ALERT: tb3_{id1} and tb3_{id2} '
-                            f'are {distance:.2f}m apart (min: {self.safe_distance}m)'
+                            f'current: {current_distance:.2f}m, predicted: {predicted_distance:.2f}m '
+                            f'(min safe: {self.safe_distance}m)'
                         )
+                elif min_distance < self.warning_distance:
+                    # Early warning - robots getting close
+                    self.get_logger().debug(
+                        f'WARNING: tb3_{id1} and tb3_{id2} approaching: {min_distance:.2f}m'
+                    )
 
         # Publish collision states
         for robot_id in robot_ids:
