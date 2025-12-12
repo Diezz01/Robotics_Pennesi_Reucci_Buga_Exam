@@ -3,7 +3,6 @@ build
 install
 log
 
-
 devel/
 logs/
 build/
