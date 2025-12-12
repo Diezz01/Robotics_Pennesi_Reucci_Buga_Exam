@@ -2183,7 +2183,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab45e70850f4f5544861ea5bb064fa7a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  linearSpeed: 4
+  linearSpeed: 2
   angularSpeed: 180
   reachThreshold: 0.5
   robotId: explorer
