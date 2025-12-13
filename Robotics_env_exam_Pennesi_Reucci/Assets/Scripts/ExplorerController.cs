@@ -83,9 +83,9 @@ public class ExplorerController : GenericRobotController
 
         Debug.Log($"<color=cyan>Robot {robotId} topics registered: {topicNameTarget}, {topicNamePath}, {topicNamePose}, {topicNameCollision}</color>");
 
-        // Setup charging station
-        chargingStationPosition = new Vector3(12f, 0f, -38f);
+        // Setup charging station (position is set by MapGenerator based on robotIndex)
         chargingStation = new Target(chargingStationPosition);
+        Debug.Log($"<color=cyan>{robotId}: Charging station set to {chargingStationPosition}</color>");
 
         // Mark initialization as complete
         isFullyInitialized = true;

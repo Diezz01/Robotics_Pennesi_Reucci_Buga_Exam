@@ -298,6 +298,7 @@ public class OccupancyGridGenerator : MonoBehaviour
         {
             controller.robotId = $"tb3_{robotIndex}";
             controller.robotIndex = robotIndex; // Store index for topic naming
+            controller.chargingStationPosition = position; // Set each robot's charging station to where it spawned
         }
 
         BatterySimulator battery = robot.GetComponent<BatterySimulator>();
@@ -307,7 +308,7 @@ public class OccupancyGridGenerator : MonoBehaviour
             battery.chargingStateTopic = $"/tb3_{robotIndex}/charging_status";
         }
 
-        Debug.Log($"<color=green>Spawned robot tb3_{robotIndex} at {position}</color>");
+        Debug.Log($"<color=green>Spawned robot tb3_{robotIndex} at charging station {position}</color>");
     }
 
     /// <summary>
