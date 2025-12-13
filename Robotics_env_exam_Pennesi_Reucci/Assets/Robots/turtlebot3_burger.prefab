@@ -1999,7 +1999,7 @@ MonoBehaviour:
   chargingStateTopic: /tb3_0/charging_status
   maxCharge: 100
   currentCharge: 100
-  dischargePerMeter: 0.5
+  dischargePerMeter: 0.3
   dischargePerSecondIdle: 0.01
   chargePerSecond: 5
 --- !u!114 &6895963446375454729
@@ -2023,6 +2023,7 @@ MonoBehaviour:
   chargingStationPosition: {x: 12, y: 0, z: -38}
   chargedThreshold: 95
   safetyCostMultiplier: 1.2
+  enableMovementDebugLogs: 0
   topicNameTarget: /target
   topicNamePath: /astar_path
   continuousOperation: 1

@@ -73,7 +73,7 @@ public class OccupancyGridGenerator : MonoBehaviour
     public int mapWidth = 100;   // celle
     public int mapHeight = 100;  // celle
     public float cellSize = 0.5f; // dimensione in metri
-    public float heightCheck = 0.0f;
+    public float heightCheck = 2.0f; // Height for obstacle detection (increased for better rock detection)
     public LayerMask obstacleLayer;
 
     public string fileName = "unity_map";
@@ -131,26 +131,52 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         // Generate occupancy grid
         int[,] grid = new int[mapWidth, mapHeight];
-        Vector3 origin = transform.position - new Vector3(mapWidth, 0, mapHeight) * cellSize * 0.5f;
+
+        Vector3 origin = transform.position -
+                         new Vector3(mapWidth * cellSize, 0, mapHeight * cellSize) * 0.5f;
+
+        Vector3 halfExtents = new Vector3(cellSize / 2f, heightCheck / 2f, cellSize / 2f);
 
         for (int x = 0; x < mapWidth; x++)
         {
             for (int y = 0; y < mapHeight; y++)
             {
-                Vector3 cellCenter = origin + new Vector3(x * cellSize + cellSize / 2, heightCheck / 2, y * cellSize + cellSize / 2);
+                Vector3 cellCenter =
+                    origin + new Vector3(x * cellSize + cellSize * 0.5f,
+                                         heightCheck * 0.5f,
+                                         y * cellSize + cellSize * 0.5f);
 
-                if (Physics.CheckBox(cellCenter, new Vector3(cellSize / 2, heightCheck / 2, cellSize / 2), Quaternion.identity, obstacleLayer))
+                // Use OverlapBox instead of CheckBox to filter out the charging zone.
+                // The charging zone should not block robot pathfinding.
+                Collider[] overlaps = Physics.OverlapBox(
+                    cellCenter,
+                    halfExtents,
+                    Quaternion.identity,
+                    obstacleLayer
+                );
+
+                // Filter out charging zone by tag
+                bool blocked = false;
+                foreach (Collider col in overlaps)
                 {
-                    grid[x, y] = 1; // occupied
+                    if (!col.CompareTag("ChargingZone"))
+                    {
+                        blocked = true;
+                        break;  // Found at least one obstacle
+                    }
                 }
-                else
-                {
-                    grid[x, y] = 0;   // free
+
+                int gridY = mapHeight - 1 - y;
+                if(blocked){
+                    grid[x, gridY] = 1;
+
+                }else{
+                    grid[x, gridY] = 0;
                 }
             }
         }
 
-        //SavePGM(grid);
+        SavePGM(grid);
         //SaveYAML();
 
         // Count obstacles for verification

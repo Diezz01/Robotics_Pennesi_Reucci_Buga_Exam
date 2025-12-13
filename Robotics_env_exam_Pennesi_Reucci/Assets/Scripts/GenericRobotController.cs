@@ -1,5 +1,6 @@
 using RosMessageTypes.Geometry;
 using RosMessageTypes.Nav;
+using RosMessageTypes.Std;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,7 +12,7 @@ public abstract class GenericRobotController : MonoBehaviour
     [Header("Movement Settings")]
     public float linearSpeed = 4.0f;       // robot speed
     public float angularSpeed = 180f;     // degree/second
-    public float reachThreshold = 0.5f;  // minimum distance to say that a target is reached
+    public float reachThreshold = 1.0f;  // minimum distance to consider target reached (increased for smoother paths)
     public string robotId = string.Empty;
     public int robotIndex = 0; // Set by MapGenerator during spawn
 
@@ -20,6 +21,9 @@ public abstract class GenericRobotController : MonoBehaviour
     public Vector3 chargingStationPosition = Vector3.zero;
     public float chargedThreshold = 95f;       // Battery % to consider charging complete
     public float safetyCostMultiplier = 1.2f;  // Safety margin for cost estimates (20%)
+
+    [Header("Debugging")]
+    public bool enableMovementDebugLogs = false;
 
     protected enum MoveState { Rotating, Moving }
     protected MoveState moveState =  MoveState.Rotating;
@@ -31,20 +35,129 @@ public abstract class GenericRobotController : MonoBehaviour
 
     public string topicNameTarget = "/target";
     public string topicNamePath = "/astar_path";
+    protected string topicNamePose = "/pose";
+    protected string topicNameCollision = "/collision_detected";
 
     protected bool waitingForPath;
+    protected bool collisionDetected = false;  // Emergency stop flag
+    private float posePublishRate = 0.1f;      // Publish position at 10Hz
+    private float posePublishTimer = 0f;
     protected bool isReturningToBase = false;
     protected bool isChargingMission = false;
     protected bool hasInsertedChargingMission = false;
 
+    // Collision waiting timeout
+    private float collisionStopTime = 0f;
+    private float maxWaitTime = 8.0f;  // Maximum seconds to wait before rerouting (synced with ROS)
+
+    // Intelligent replanning
+    private int rerouteAttempts = 0;
+    private float lastRerouteTime = 0f;
+
     protected ROSConnection ros;
+    protected bool isFullyInitialized = false;  // Track complete initialization to prevent publishing before setup
 
     // -----------------------------
-    // ROBOT MOVEMENT FOLLOWING THE PATH  
+    // POSITION PUBLISHING & COLLISION DETECTION
+    // -----------------------------
+    protected void UpdatePositionPublishing()
+    {
+        posePublishTimer += Time.deltaTime;
+
+        if (posePublishTimer >= posePublishRate)
+        {
+            PublishPosition();
+            posePublishTimer = 0f;
+        }
+    }
+
+    protected void PublishPosition()
+    {
+        // Don't publish if ROS connection not fully initialized yet
+        if (!isFullyInitialized) return;
+
+        PoseStampedMsg poseMsg = new PoseStampedMsg();
+        poseMsg.header.stamp.sec = (int)Time.time;
+        poseMsg.header.stamp.nanosec = (uint)((Time.time - (int)Time.time) * 1e9);
+        poseMsg.header.frame_id = "map";
+
+        Vector3 pos = transform.position;
+        poseMsg.pose.position = new PointMsg(pos.x, pos.y, pos.z);
+        poseMsg.pose.orientation = new QuaternionMsg(0, 0, 0, 1);
+
+        ros.Publish(topicNamePose, poseMsg);
+    }
+
+    protected void OnCollisionDetected(BoolMsg msg)
+    {
+        bool previousState = collisionDetected;
+        collisionDetected = msg.data;
+
+        if (collisionDetected && !previousState)
+        {
+            Debug.Log($"<color=red>{robotId}: COLLISION DETECTED - STOPPING</color>");
+        }
+        else if (!collisionDetected && previousState)
+        {
+            Debug.Log($"<color=lime>{robotId}: Path clear - RESUMING</color>");
+        }
+    }
+
+    // -----------------------------
+    // ROBOT MOVEMENT FOLLOWING THE PATH
     // -----------------------------
     protected void MoveAlongPathWithRotation()
     {
         if (currentPath.Count == 0 || !isMoving) return;
+
+        // EMERGENCY STOP: If collision detected, pause movement
+        if (collisionDetected)
+        {
+            // Track how long we've been stopped
+            collisionStopTime += Time.deltaTime;
+
+            if (collisionStopTime > maxWaitTime)
+            {
+                Debug.LogWarning($"{robotId}: Waited {collisionStopTime:F1}s - requesting alternate path");
+
+                // Exponential backoff for reroute attempts
+                rerouteAttempts++;
+                float backoffDelay = Mathf.Min(rerouteAttempts * 2f, 10f);
+
+                if (Time.time - lastRerouteTime < backoffDelay)
+                {
+                    return;  // Wait for backoff period
+                }
+
+                lastRerouteTime = Time.time;
+                collisionStopTime = 0f;
+
+                // Try lateral offset path (first 3 attempts)
+                if (rerouteAttempts <= 3 && currentTarget != null)
+                {
+                    Vector3 lateralOffset = Vector3.Cross(Vector3.up, transform.forward).normalized * 5f;
+                    Vector3 offsetGoal = currentTarget.Position + lateralOffset;
+
+                    Debug.Log($"{robotId}: Attempt {rerouteAttempts} - trying offset path to {offsetGoal}");
+                    PublishTarget(offsetGoal);
+                }
+                else if (currentTarget != null)
+                {
+                    // After 3 attempts, try original goal again
+                    Debug.Log($"{robotId}: Reattempting original goal");
+                    PublishTarget(currentTarget.Position);
+                    rerouteAttempts = 0;  // Reset
+                }
+
+                // DON'T clear collisionDetected here - let ROS handle it
+            }
+            return;  // Don't move until collision clears
+        }
+        else
+        {
+            // Collision cleared - reset timer
+            collisionStopTime = 0f;
+        }
 
         Vector3 target = currentPath[currentPathIndex];
         Vector3 dir = new Vector3(
@@ -59,7 +172,10 @@ public abstract class GenericRobotController : MonoBehaviour
         // Check if the point is reached
         if (distance <= reachThreshold)
         {
-            Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
+            if (enableMovementDebugLogs)
+            {
+                Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
+            }
 
             currentPathIndex++;
             if (currentPathIndex >= currentPath.Count)
@@ -69,8 +185,10 @@ public abstract class GenericRobotController : MonoBehaviour
                 OnReachedTarget();
                 return;
             }
-
-            Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
+            if (enableMovementDebugLogs)
+            {
+                Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
+            }
             moveState = MoveState.Rotating;
             return;
         }
@@ -120,12 +238,20 @@ public abstract class GenericRobotController : MonoBehaviour
         currentPathIndex = 0;
         isMoving = true;
         moveState = MoveState.Rotating;
+        rerouteAttempts = 0;  // Reset on successful path
 
         Debug.Log($"<color=green>Path received from ROS. Length: {currentPath.Count}</color>");
     }
 
     protected void PublishTarget(Vector3 target)
     {
+        // Don't publish if ROS connection not fully initialized yet
+        if (!isFullyInitialized)
+        {
+            Debug.LogWarning($"{robotId}: Cannot publish target - ROS not fully initialized yet");
+            return;
+        }
+
         PoseArrayMsg msg = new PoseArrayMsg();
         msg.poses = new PoseMsg[2];
 

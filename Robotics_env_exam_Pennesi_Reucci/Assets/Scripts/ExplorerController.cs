@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using RosMessageTypes.Nav;
+using RosMessageTypes.Std;
 using System;
 
 public class ExplorerController : GenericRobotController
@@ -21,23 +22,74 @@ public class ExplorerController : GenericRobotController
     // Start is called before the first frame update
     void Start()
     {
-        // If robotId is not set by MapGenerator, use default with index
+        // Start staggered initialization to prevent ros_tcp_endpoint overload
+        StartCoroutine(InitializeWithConnectionCheck());
+    }
+
+    IEnumerator InitializeWithConnectionCheck()
+    {
+        // Setup robot ID
         if (string.IsNullOrEmpty(robotId))
         {
             robotId = $"tb3_{robotIndex}";
         }
 
-        // Create namespaced topics per robot
+        // CRITICAL: Stagger initialization by robot index to prevent endpoint crash
+        // With 6 robots registering 4+ topics each (24+ total), the endpoint crashes
+        // Staggering prevents simultaneous topic registration overload
+        float staggerDelay = robotIndex * 0.5f;
+        if (staggerDelay > 0)
+        {
+            Debug.Log($"<color=yellow>{robotId}: Waiting {staggerDelay}s before initialization (stagger to prevent endpoint crash)</color>");
+            yield return new WaitForSeconds(staggerDelay);
+        }
+
+        // Setup topic names
         topicNameTarget = $"/tb3_{robotIndex}/target";
         topicNamePath = $"/tb3_{robotIndex}/astar_path";
+        topicNamePose = $"/tb3_{robotIndex}/pose";
+        topicNameCollision = $"/tb3_{robotIndex}/collision_detected";
 
-        Debug.Log($"<color=cyan>Robot {robotId} using topics: {topicNameTarget}, {topicNamePath}</color>");
+        ros = ROSConnection.GetOrCreateInstance();
 
+        // Wait for ROS connection to be established
+        int maxRetries = 20;  // 20 retries × 0.5s = 10 seconds max wait
+        int retries = 0;
+        while (!ros.HasConnectionThread && retries < maxRetries)
+        {
+            if (retries == 0)
+            {
+                Debug.Log($"<color=yellow>{robotId}: Waiting for ROS connection...</color>");
+            }
+            yield return new WaitForSeconds(0.5f);
+            retries++;
+        }
+
+        if (!ros.HasConnectionThread)
+        {
+            Debug.LogError($"<color=red>{robotId}: Failed to connect to ROS after {maxRetries * 0.5f} seconds. Check ROS TCP endpoint is running!</color>");
+            yield break;
+        }
+
+        Debug.Log($"<color=lime>{robotId}: ROS connected! Registering topics...</color>");
+
+        // Register publishers
+        ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
+        ros.RegisterPublisher<PoseStampedMsg>(topicNamePose);
+
+        // Register subscribers
+        ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
+        ros.Subscribe<BoolMsg>(topicNameCollision, OnCollisionDetected);
+
+        Debug.Log($"<color=cyan>Robot {robotId} topics registered: {topicNameTarget}, {topicNamePath}, {topicNamePose}, {topicNameCollision}</color>");
+
+        // Setup charging station
         chargingStationPosition = new Vector3(12f, 0f, -38f);
         chargingStation = new Target(chargingStationPosition);
-        ros = ROSConnection.GetOrCreateInstance();
-        ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
-        ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
+
+        // Mark initialization as complete
+        isFullyInitialized = true;
+        Debug.Log($"<color=lime>{robotId}: Initialization complete - ready to publish!</color>");
     }
 
     private bool hasStartedMission = false;
@@ -45,6 +97,9 @@ public class ExplorerController : GenericRobotController
     // Update is called once per frame
     void Update()
     {
+        // Continuously publish position for collision avoidance
+        UpdatePositionPublishing();
+
         if (excavationPointsList.Count == 0)
         {
             GetExcavationPoints();
