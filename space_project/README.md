@@ -5,10 +5,14 @@ This ROS2 package implements battery-aware multi-robot navigation using the A* p
 ## Features
 
 - ✅ **A* Pathfinding**: Optimal path planning with obstacle avoidance
+- ✅ **Multi-Robot Collision Avoidance**: Real-time collision detection with predictive algorithm
+- ✅ **Path Approval Service**: Centralized path coordination to prevent conflicts
 - ✅ **Battery Management**: Real-time battery monitoring and health metrics
 - ✅ **Autonomous Charging**: Robots automatically navigate to charging stations when battery is low
+- ✅ **Priority-Based Coordination**: Distance-to-goal prioritization for conflict resolution
+- ✅ **Deadlock Detection**: Automatic recovery from deadlock situations
 - ✅ **Unity Integration**: Seamless communication with Unity simulation via ROS-TCP-Connector
-- ✅ **Multi-Robot Support**: Configurable for multiple robots with independent battery systems
+- ✅ **Multi-Robot Support**: Configurable for up to 6 robots with independent coordination
 
 ## Prerequisites
 
@@ -29,11 +33,14 @@ This ROS2 package implements battery-aware multi-robot navigation using the A* p
 space_project/
 ├── space_project/
 │   ├── __init__.py
-│   ├── astar_navigation_node.py    # A* navigation controller
-│   └── battery_manager.py          # Battery monitoring and health metrics
+│   ├── astar_navigation_node.py        # A* navigation controller with path approval
+│   ├── collision_coordinator_node.py   # Multi-robot collision avoidance & coordination
+│   └── battery_manager.py              # Battery monitoring and health metrics
+├── srv/
+│   └── PathApproval.srv                # Path approval service definition
 ├── launch/
-│   ├── multi_robots.launch.py      # Multi-robot launch file
-│   └── battery_system.launch.py    # Complete battery management system
+│   ├── multi_robots.launch.py          # Multi-robot launch file
+│   └── battery_system.launch.py        # Complete battery management system
 ├── package.xml
 ├── setup.py
 └── README.md
@@ -61,11 +68,57 @@ space_project/
 │  │ astar_navigation │◄────────┤   battery_manager      │   │
 │  │  Path Planning   │         │  Health Monitoring     │   │
 │  └──────────────────┘         └────────────────────────┘   │
+│           │                                                  │
+│           │ PathApproval Service                            │
+│           ▼                                                  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         collision_coordinator_node                    │  │
+│  │  Multi-Robot Collision Avoidance & Path Approval     │  │
+│  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │         ROS-TCP-Endpoint (Unity Bridge)              │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Collision Coordinator Node
+
+**Purpose:** Centralized multi-robot collision avoidance and path coordination
+
+**Features:**
+- **Real-time collision detection** (10 Hz) with velocity-based prediction
+- **Path approval service** for pre-movement coordination
+- **Priority-based conflict resolution** using distance-to-goal
+- **Deadlock detection** with automatic recovery (8-second timeout)
+- **Hysteresis control** to prevent state oscillation (0.5s cooldown)
+
+**Launch:**
+```bash
+ros2 run space_project collision_coordinator_node --ros-args -p num_robots:=6
+```
+
+**Parameters:**
+- `num_robots` (int, default: 6): Number of robots in system
+- `safe_distance` (float, default: 4.0): Minimum separation (meters)
+- `path_buffer` (float, default: 3.0): Planning buffer (meters)
+- `collision_warning_distance` (float, default: 6.0): Early warning (meters)
+
+**Subscribed Topics (per robot):**
+- `/tb3_{i}/pose` (PoseStamped): Robot position for collision detection
+
+**Published Topics (per robot):**
+- `/tb3_{i}/collision_detected` (Bool): Emergency stop signal
+
+**Services:**
+- `/request_path_approval` (PathApproval): Approve/reject path requests before planning
+
+**Algorithm:**
+1. **Predictive Detection**: Uses velocity-based prediction (1s horizon) to prevent collisions
+2. **Priority Resolution**: Lower priority robots stop (priority = distance_to_goal + robot_id × 0.01)
+3. **Deadlock Recovery**: Clears collision flags after 8s timeout
+4. **Hysteresis**: 0.5s cooldown between state changes to prevent oscillation
+
+**Code:** `space_project/collision_coordinator_node.py`
 
 ### Battery Management Flow
 
@@ -259,24 +312,100 @@ ros2 topic echo /tb3_0/battery_health
 ros2 topic echo /tb3_0/battery_alert
 ```
 
+## ROS2 Services
+
+### PathApproval Service
+
+**Service:** `/request_path_approval`
+**Type:** `space_project/PathApproval`
+**Purpose:** Multi-robot path coordination - request approval before planning path
+
+#### Service Definition
+
+**Request:**
+```
+int32 robot_id              # Requesting robot index (0-5)
+float64 start_x             # Current X position
+float64 start_y             # Current Y position (Unity Z)
+float64 goal_x              # Target X position
+float64 goal_y              # Target Y position (Unity Z)
+```
+
+**Response:**
+```
+bool approved               # true = approved, false = rejected
+float32 wait_time           # Suggested wait time (0 if approved, 3.0 if rejected)
+string reason               # Explanation (e.g., "Path clear" or "Wait for tb3_2")
+```
+
+#### Example Usage
+
+**Test service call:**
+```bash
+ros2 service call /request_path_approval space_project/srv/PathApproval \
+  "{robot_id: 0, start_x: 10.0, start_y: 20.0, goal_x: 30.0, goal_y: 40.0}"
+```
+
+**Expected Response (approved):**
+```
+approved: True
+wait_time: 0.0
+reason: "Path clear"
+```
+
+**Expected Response (rejected):**
+```
+approved: False
+wait_time: 3.0
+reason: "Wait for tb3_2 (5.2m away)"
+```
+
+#### Algorithm
+
+The service evaluates requests using:
+1. **Goal conflict check**: Compare goal with other robots' positions and goals
+2. **Priority evaluation**: Calculate priority = distance_to_goal + (robot_id × 0.01)
+3. **Decision**: Approve if no conflict OR requesting robot has higher priority (lower value)
+4. **Retry**: If rejected, requester retries after wait_time (3.0 seconds)
+
 ## ROS2 Topics
 
-### Battery Topics
+### Per-Robot Topics
 
-| Topic | Type | Direction | Purpose |
-|-------|------|-----------|---------|
-| `/tb3_0/battery_state` | `std_msgs/Float32` | Unity → ROS2 | Current battery percentage |
-| `/tb3_0/charging_status` | `std_msgs/Bool` | Unity → ROS2 | Charging state (true/false) |
-| `/tb3_0/battery_health` | `std_msgs/String` (JSON) | ROS2 | Battery health metrics |
-| `/tb3_0/battery_alert` | `std_msgs/String` (JSON) | ROS2 | Battery alerts (LOW, CRITICAL) |
+Each robot (tb3_0 through tb3_5) has its own dedicated topics:
 
-### Navigation Topics
+#### Battery Topics
+
+| Topic Pattern | Type | Direction | Purpose |
+|---------------|------|-----------|---------|
+| `/tb3_{i}/battery_state` | `std_msgs/Float32` | Unity → ROS2 | Current battery percentage (0-100) |
+| `/tb3_{i}/charging_status` | `std_msgs/Bool` | Unity → ROS2 | Charging state (true/false) |
+| `/tb3_{i}/battery_health` | `std_msgs/String` (JSON) | ROS2 | Battery health metrics |
+| `/tb3_{i}/battery_alert` | `std_msgs/String` (JSON) | ROS2 | Battery alerts (LOW, CRITICAL) |
+
+#### Navigation Topics
+
+| Topic Pattern | Type | Direction | Purpose |
+|---------------|------|-----------|---------|
+| `/tb3_{i}/target` | `geometry_msgs/PoseArray` | Unity → ROS2 | Target positions [robot_pos, target_pos] |
+| `/tb3_{i}/astar_path` | `nav_msgs/Path` | ROS2 → Unity | Computed A* path waypoints |
+
+#### Collision Avoidance Topics
+
+| Topic Pattern | Type | Direction | Purpose |
+|---------------|------|-----------|---------|
+| `/tb3_{i}/pose` | `geometry_msgs/PoseStamped` | Unity → ROS2 | Robot position for collision detection (10 Hz) |
+| `/tb3_{i}/collision_detected` | `std_msgs/Bool` | ROS2 → Unity | Emergency stop signal (10 Hz) |
+
+### Shared Topics
+
+These topics are shared across all robots:
 
 | Topic | Type | Direction | Purpose |
 |-------|------|-----------|---------|
 | `/map` | `nav_msgs/OccupancyGrid` | Unity → ROS2 | Occupancy grid for navigation |
-| `/target` | `geometry_msgs/PoseArray` | Unity → ROS2 | Target positions [robot_pos, target_pos] |
-| `/astar_path` | `nav_msgs/Path` | ROS2 → Unity | Computed A* path waypoints |
+| `/robots` | `geometry_msgs/PoseArray` | Unity → ROS2 | Initial robot spawn positions |
+| `/targets` | `geometry_msgs/PoseArray` | Unity → ROS2 | Excavation point positions |
 
 ### Battery Health Message Format (JSON)
 
@@ -303,6 +432,7 @@ ros2 node list
 ```
 Expected:
 ```
+/collision_coordinator_node
 /astar_navigation
 /battery_manager
 /ros_tcp_endpoint
