@@ -142,27 +142,47 @@ public class ExplorerController : GenericRobotController
     }
 
     // -----------------------------
-    // LOAD EXCAVATION POINTS
+    // LOAD EXCAVATION POINTS WITH TASK ALLOCATION
     // -----------------------------
     private void GetExcavationPoints()
     {
-        GameObject[] trovati = GameObject.FindGameObjectsWithTag("ExcavationPoint");
+        GameObject[] allPoints = GameObject.FindGameObjectsWithTag("ExcavationPoint");
 
-        foreach (GameObject go in trovati)
+        // Sort by position for deterministic assignment across all robots
+        // This ensures consistent point distribution even if GameObject.Find order varies
+        System.Array.Sort(allPoints, (a, b) =>
         {
-            ExcavationPoint component = go.GetComponent<ExcavationPoint>();
+            int xCompare = a.transform.position.x.CompareTo(b.transform.position.x);
+            if (xCompare != 0) return xCompare;
+            return a.transform.position.z.CompareTo(b.transform.position.z);
+        });
 
-            // Create data wrapper for navigation
-            ExcavationPointTarget target = new ExcavationPointTarget(
-                go.transform.position,
-                component.Type
-            );
+        // Get total number of robots (hardcoded for now, can be made configurable)
+        int totalRobots = 4;
 
-            excavationPointsList.Add(target);
-            targetQueue.Enqueue(target);
+        // Round-robin assignment: each robot gets every Nth point
+        int assignedCount = 0;
+        for (int i = 0; i < allPoints.Length; i++)
+        {
+            // This robot only takes points where: pointIndex % totalRobots == robotIndex
+            if (i % totalRobots == robotIndex)
+            {
+                GameObject go = allPoints[i];
+                ExcavationPoint component = go.GetComponent<ExcavationPoint>();
+
+                // Create data wrapper for navigation
+                ExcavationPointTarget target = new ExcavationPointTarget(
+                    go.transform.position,
+                    component.Type
+                );
+
+                excavationPointsList.Add(target);
+                targetQueue.Enqueue(target);
+                assignedCount++;
+            }
         }
 
-        Debug.Log($"<color=green>Loaded {excavationPointsList.Count} excavation points for continuous mission cycle.</color>");
+        Debug.Log($"<color=green>{robotId}: Assigned {assignedCount}/{allPoints.Length} excavation points (robot {robotIndex}/{totalRobots})</color>");
     }
 
     // -----------------------------
@@ -187,6 +207,7 @@ public class ExplorerController : GenericRobotController
     protected override void OnReachedTarget()
     {
         Debug.Log($"<color=cyan>Target reached: {currentTarget}</color>");
+        Debug.Log($"<color=magenta>[DIAGNOSTIC] {robotId}: OnReachedTarget() called. isCharging: {isChargingMission}, queue remaining: {targetQueue.Count}</color>");
 
         currentPath.Clear();
         currentPathIndex = 0;
@@ -212,6 +233,8 @@ public class ExplorerController : GenericRobotController
     // -----------------------------
     private void StartNextTarget()
     {
+        Debug.Log($"<color=magenta>[DIAGNOSTIC] {robotId}: StartNextTarget() called. Queue: {targetQueue.Count}, isCharging: {isChargingMission}, battery: {batterySimulator.currentCharge:F1}%</color>");
+
         // If we just finished charging, reset the flag and continue
         if (isChargingMission)
         {
@@ -224,19 +247,20 @@ public class ExplorerController : GenericRobotController
         // If queue is empty, reload excavation points for continuous operation
         if (targetQueue.Count == 0)
         {
-            if (excavationPointsList.Count > 0 && continuousOperation)
+            if (excavationPointsList.Count == 0)
             {
-                Debug.Log("<color=lime>Mission cycle complete! Reloading excavation points for continuous operation.</color>");
-                ReloadMissionQueue();
-            }
-            else if (!continuousOperation)
-            {
-                Debug.Log("<color=white>Mission cycle complete. Continuous operation disabled - robot stopped.</color>");
+                // This robot got no excavation points assigned
+                Debug.Log($"<color=yellow>{robotId}: No excavation points assigned. Standing by.</color>");
                 return;
+            }
+            else if (continuousOperation)
+            {
+                Debug.Log($"<color=lime>{robotId}: Mission cycle complete! Reloading excavation points for continuous operation.</color>");
+                ReloadMissionQueue();
             }
             else
             {
-                Debug.Log("<color=white>No excavation points available.</color>");
+                Debug.Log($"<color=white>{robotId}: Mission cycle complete. Continuous operation disabled - robot stopped.</color>");
                 return;
             }
         }

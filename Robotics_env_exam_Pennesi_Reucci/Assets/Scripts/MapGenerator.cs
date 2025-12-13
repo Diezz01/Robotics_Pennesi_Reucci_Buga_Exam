@@ -62,6 +62,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     [Range(0, 6)]
     public int numberOfRobots = 0;
 
+    [Tooltip("Number of excavation points to spawn. Should be >= numberOfRobots for mission variety (e.g., 8-12 for 4 robots).")]
+    [Range(1, 20)]
+    public int numberOfExcavationPoints = 8;
+
     [Tooltip("Parent spawned rocks under this transform")]
     public Transform rocksParent;
     //////////////
@@ -106,7 +110,7 @@ public class OccupancyGridGenerator : MonoBehaviour
         {
             SpawnRobots(numRobots);
             SpawnRocks();
-            msgTargets = SpawnExcavationPoints(numRobots);
+            msgTargets = SpawnExcavationPoints(numberOfExcavationPoints);
         }
 
         // Start coroutine to generate grid after physics update
@@ -397,10 +401,10 @@ public class OccupancyGridGenerator : MonoBehaviour
     }
 
 
-    public PoseArrayMsg SpawnExcavationPoints(int numRobots)
+    public PoseArrayMsg SpawnExcavationPoints(int numPoints)
     {
         PoseArrayMsg msgTargets = new PoseArrayMsg();
-        msgTargets.poses = new PoseMsg[numRobots];
+        msgTargets.poses = new PoseMsg[numPoints];
 
         if (excPointPrefab == null)
         {
@@ -414,7 +418,7 @@ public class OccupancyGridGenerator : MonoBehaviour
             excPointParent = parentObj.transform;
         }
 
-        for (int i = 0; i < numRobots; i++)
+        for (int i = 0; i < numPoints; i++)
         {
             Vector3 pos = SpawnSingleExcPoint();
 
@@ -425,7 +429,7 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         }
 
-        Debug.Log($"ExcPointSpawner: Spawned {numRobots} excavation point.");
+        Debug.Log($"<color=green>ExcPointSpawner: Spawned {numPoints} excavation points.</color>");
         return msgTargets;
     }
 
