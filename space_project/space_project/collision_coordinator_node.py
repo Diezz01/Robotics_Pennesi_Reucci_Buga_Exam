@@ -34,6 +34,10 @@ class CollisionCoordinatorNode(Node):
         self.robot_stopped_times = {}  # Track how long each robot has been stopped
         self.deadlock_timeout = 8.0    # Seconds before declaring deadlock (synced with Unity)
 
+        # Hysteresis to prevent collision flapping
+        self.collision_state_change_times = {}  # {robot_id: timestamp of last state change}
+        self.hysteresis_duration = 0.5  # Minimum seconds before collision state can change (prevents oscillation)
+
         # === TOPICS: Real-time position sharing ===
         self.pose_subs = []
         for i in range(self.num_robots):
@@ -195,18 +199,38 @@ class CollisionCoordinatorNode(Node):
                 if robot_id in self.robot_stopped_times:
                     del self.robot_stopped_times[robot_id]
 
-        # Publish collision states
+        # Publish collision states with hysteresis to prevent oscillation
+        current_time = self.get_clock().now()
         for robot_id in robot_ids:
-            msg = Bool()
-            msg.data = new_collision_states[robot_id]
+            new_state = new_collision_states[robot_id]
+            current_state = self.collision_states.get(robot_id, False)
 
-            # Publish if state changed
-            if msg.data != self.collision_states.get(robot_id, False):
-                self.collision_pubs[robot_id].publish(msg)
-                status = "STOP" if msg.data else "RESUME"
-                self.get_logger().info(f'tb3_{robot_id}: {status}')
+            # Check if state would change
+            if new_state != current_state:
+                # Check hysteresis: only allow change if enough time has passed since last change
+                last_change_time = self.collision_state_change_times.get(robot_id, None)
 
-            self.collision_states[robot_id] = msg.data
+                if last_change_time is None:
+                    # First state change - allow immediately
+                    can_change = True
+                else:
+                    # Check if hysteresis duration has passed
+                    time_since_change = (current_time - last_change_time).nanoseconds / 1e9
+                    can_change = time_since_change >= self.hysteresis_duration
+
+                if can_change:
+                    # Publish state change
+                    msg = Bool()
+                    msg.data = new_state
+                    self.collision_pubs[robot_id].publish(msg)
+                    status = "STOP" if new_state else "RESUME"
+                    self.get_logger().info(f'tb3_{robot_id}: {status}')
+
+                    # Update stored state and change timestamp
+                    self.collision_states[robot_id] = new_state
+                    self.collision_state_change_times[robot_id] = current_time
+                # else: state change suppressed by hysteresis - maintain current state
+            # else: no change needed, keep current state
 
     def update_robot_priorities(self):
         """Update priorities based on distance to goal - closer robots have higher priority"""
