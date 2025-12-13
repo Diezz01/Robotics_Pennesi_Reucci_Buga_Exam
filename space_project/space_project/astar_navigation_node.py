@@ -26,6 +26,9 @@ class UnityAStarController(Node):
 
         num_robots = self.get_parameter('num_robots').value
 
+        # Retry tracking for path rejection
+        self.retry_timers = {}  # {robot_id: timer}
+
         # Subscribe to shared map (all robots use same map)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
 
@@ -310,14 +313,20 @@ class UnityAStarController(Node):
         future = self.path_approval_client.call_async(request)
         future.add_done_callback(lambda f: self.handle_path_approval_response(f, robot_idx, src, dest))
 
-    def handle_path_approval_response(self, future, robot_idx, src, dest):
-        """Handle async path approval response"""
+    def handle_path_approval_response(self, future, robot_idx, src, dest, attempt=0):
+        """Handle async path approval response with retry logic"""
         robot_name = f'tb3_{robot_idx}'
 
         try:
             response = future.result()
             if response.approved:
                 self.get_logger().info(f'{robot_name}: Path APPROVED - {response.reason}')
+
+                # Cancel any pending retry timer
+                if robot_idx in self.retry_timers:
+                    self.retry_timers[robot_idx].cancel()
+                    del self.retry_timers[robot_idx]
+
                 # Compute and publish path
                 path = self.a_star_search(src, dest)
                 if path:
@@ -325,11 +334,25 @@ class UnityAStarController(Node):
                 else:
                     self.get_logger().error(f'{robot_name}: Failed to find path')
             else:
-                self.get_logger().warning(
-                    f'{robot_name}: Path NOT approved - {response.reason}. '
-                    f'Suggested wait: {response.wait_time}s'
-                )
-                # Path rejected - robot will retry later
+                # Path NOT approved
+                if attempt < 5:  # Max 5 retry attempts
+                    # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                    wait_time = 2 ** attempt
+                    self.get_logger().warn(
+                        f'{robot_name}: Path NOT approved - {response.reason}. '
+                        f'Retry {attempt+1}/5 in {wait_time}s'
+                    )
+
+                    # Schedule retry with timer
+                    timer = self.create_timer(
+                        wait_time,
+                        lambda: self.retry_path_request(robot_idx, src, dest, attempt+1)
+                    )
+                    self.retry_timers[robot_idx] = timer
+                else:
+                    self.get_logger().error(
+                        f'{robot_name}: Path approval failed after 5 attempts - giving up'
+                    )
         except Exception as e:
             # Service call failed - plan anyway as fallback
             self.get_logger().warning(f'{robot_name}: Service call failed ({e}) - planning without approval')
@@ -338,6 +361,26 @@ class UnityAStarController(Node):
                 self.publish_path(path, robot_idx)
             else:
                 self.get_logger().error(f'{robot_name}: Failed to find path')
+
+    def retry_path_request(self, robot_idx, src, dest, attempt):
+        """Retry path request after delay"""
+        # Cancel one-shot timer
+        if robot_idx in self.retry_timers:
+            self.retry_timers[robot_idx].cancel()
+            del self.retry_timers[robot_idx]
+
+        robot_name = f'tb3_{robot_idx}'
+        self.get_logger().info(f'{robot_name}: Retrying path request (attempt {attempt}/5)')
+
+        request = PathApproval.Request()
+        request.robot_id = robot_idx
+        request.start_x = float(src[0])
+        request.start_y = float(src[1])
+        request.goal_x = float(dest[0])
+        request.goal_y = float(dest[1])
+
+        future = self.path_approval_client.call_async(request)
+        future.add_done_callback(lambda f: self.handle_path_approval_response(f, robot_idx, src, dest, attempt))
 
     # OLD SINGLE-ROBOT CALLBACK - Kept for reference but not used
     # def target_explorer_callback(self, msg):

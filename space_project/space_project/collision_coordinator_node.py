@@ -32,7 +32,7 @@ class CollisionCoordinatorNode(Node):
 
         # Deadlock detection
         self.robot_stopped_times = {}  # Track how long each robot has been stopped
-        self.deadlock_timeout = 5.0    # Seconds before declaring deadlock
+        self.deadlock_timeout = 8.0    # Seconds before declaring deadlock (synced with Unity)
 
         # === TOPICS: Real-time position sharing ===
         self.pose_subs = []
@@ -46,7 +46,8 @@ class CollisionCoordinatorNode(Node):
             )
             self.pose_subs.append(pose_sub)
             self.collision_states[i] = False
-            self.robot_priorities[i] = i  # Default priority by ID
+            # Note: Priorities now calculated dynamically based on distance-to-goal
+            # (see update_robot_priorities method)
             self.get_logger().info(f'Subscribed to /{robot_name}/pose')
 
         # Publishers for emergency collision alerts
@@ -91,8 +92,11 @@ class CollisionCoordinatorNode(Node):
                 vx = (x - prev_pos[0]) / dt
                 vy = (y - prev_pos[1]) / dt
                 self.robot_velocities[robot_id] = (vx, vy)
-        
+
         self.robot_positions[robot_id] = (x, y, timestamp)
+
+        # Update priorities every position update
+        self.update_robot_priorities()
 
     def check_real_time_collisions(self):
         """REACTIVE: Check for imminent collisions between moving robots with predictive detection"""
@@ -136,12 +140,26 @@ class CollisionCoordinatorNode(Node):
                 if min_distance < self.safe_distance:
                     # Collision imminent! Determine who should stop
                     # Strict priority: ONLY lower priority stops
-                    # Tie-breaker: if equal priority, lower ID stops
-                    if (self.robot_priorities[id1] < self.robot_priorities[id2] or
-                        (self.robot_priorities[id1] == self.robot_priorities[id2] and id1 < id2)):
-                        new_collision_states[id1] = True
+                    # Lower value = higher priority (closer to goal)
+                    if id1 in self.robot_priorities and id2 in self.robot_priorities:
+                        if self.robot_priorities[id1] > self.robot_priorities[id2]:
+                            # id1 has lower priority (farther from goal) - it stops
+                            new_collision_states[id1] = True
+                        elif self.robot_priorities[id1] < self.robot_priorities[id2]:
+                            # id2 has lower priority - it stops
+                            new_collision_states[id2] = True
+                        else:
+                            # Exactly equal priorities (rare with distance-based + ID tiebreaker)
+                            if id1 < id2:
+                                new_collision_states[id2] = True
+                            else:
+                                new_collision_states[id1] = True
                     else:
-                        new_collision_states[id2] = True
+                        # Fallback if priorities not yet assigned: use ID-based tiebreaker
+                        if id1 < id2:
+                            new_collision_states[id2] = True
+                        else:
+                            new_collision_states[id1] = True
 
                     if not (self.collision_states.get(id1) and self.collision_states.get(id2)):
                         self.get_logger().warning(
@@ -189,6 +207,16 @@ class CollisionCoordinatorNode(Node):
                 self.get_logger().info(f'tb3_{robot_id}: {status}')
 
             self.collision_states[robot_id] = msg.data
+
+    def update_robot_priorities(self):
+        """Update priorities based on distance to goal - closer robots have higher priority"""
+        for robot_id, goal in self.robot_goals.items():
+            if robot_id in self.robot_positions:
+                pos = self.robot_positions[robot_id]
+                distance = math.sqrt((goal[0] - pos[0])**2 + (goal[1] - pos[1])**2)
+                # Lower distance = higher priority (lower value)
+                # Add small robot_id tiebreaker to ensure uniqueness
+                self.robot_priorities[robot_id] = distance + (robot_id * 0.01)
 
     def path_approval_callback(self, request, response):
         """PREDICTIVE: Approve/reject path before robot starts moving"""
