@@ -23,10 +23,8 @@ class UnityAStarController(Node):
 
         # Declare parameter for number of robots
         self.declare_parameter('num_robots', 6)
-        self.declare_parameter('obstacle_inflation_cells', 2)  # Additional safety inflation in grid cells
-        
+
         num_robots = self.get_parameter('num_robots').value
-        self.obstacle_inflation = self.get_parameter('obstacle_inflation_cells').value
 
         # Subscribe to shared map (all robots use same map)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
@@ -226,7 +224,7 @@ class UnityAStarController(Node):
         self.resolution = msg.info.resolution
 
         # Convert map to list of lists
-        raw_grid = []
+        grid = []
         obstacle_count = 0
         for row in range(self.map_col):
             row_data = []
@@ -237,30 +235,10 @@ class UnityAStarController(Node):
                     obstacle_count += 1
                 else:
                     row_data.append(0)  # free
-            raw_grid.append(row_data)
+            grid.append(row_data)
 
-        # Apply additional obstacle inflation for safety
-        if self.obstacle_inflation > 0:
-            grid = [[0 for _ in range(self.map_row)] for _ in range(self.map_col)]
-            inflation = self.obstacle_inflation
-            
-            for row in range(self.map_col):
-                for col in range(self.map_row):
-                    if raw_grid[row][col] == 1:
-                        # Inflate this obstacle cell
-                        for dr in range(-inflation, inflation + 1):
-                            for dc in range(-inflation, inflation + 1):
-                                nr, nc = row + dr, col + dc
-                                if 0 <= nr < self.map_col and 0 <= nc < self.map_row:
-                                    # Use circular inflation
-                                    if (dr*dr + dc*dc) <= inflation*inflation:
-                                        grid[nr][nc] = 1
-            
-            inflated_count = sum(sum(row) for row in grid)
-            self.get_logger().info(f'Applied obstacle inflation: {obstacle_count} -> {inflated_count} cells')
-            self.map_data = grid
-        else:
-            self.map_data = raw_grid
+        # Store grid data
+        self.map_data = grid
 
         # Enhanced logging
         total_cells = self.map_row * self.map_col
