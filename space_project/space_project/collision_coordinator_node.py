@@ -84,7 +84,7 @@ class CollisionCoordinatorNode(Node):
     def pose_callback(self, msg, robot_id):
         """Store robot position from continuous updates"""
         x = msg.pose.position.x
-        y = msg.pose.position.y
+        y = msg.pose.position.z  # Use Z-axis for horizontal 2D position (Unity ground plane is X-Z)
         timestamp = self.get_clock().now()
         
         # Calculate velocity from position change
