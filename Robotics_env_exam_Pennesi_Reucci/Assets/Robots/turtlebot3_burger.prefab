@@ -1654,6 +1654,7 @@ GameObject:
   - component: {fileID: 4427616733298921708}
   - component: {fileID: 1020329537373121262}
   - component: {fileID: 4703463492023986964}
+  - component: {fileID: 6863043297087756301}
   m_Layer: 3
   m_Name: turtlebot3_burger
   m_TagString: robot
@@ -1671,7 +1672,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 49, y: 0, z: 49}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 4, y: 4, z: 4}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 2436106537925645787}
@@ -1731,7 +1732,7 @@ MonoBehaviour:
   linearSpeed: 1
   angularSpeed: 180
   reachThreshold: 0.05
-  topicName: /robot_0/astar_path
+  topicName: 
 --- !u!54 &4427616733298921708
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1877,6 +1878,30 @@ LineRenderer:
   m_UseWorldSpace: 1
   m_Loop: 0
   m_ApplyActiveColorSpace: 1
+--- !u!114 &6863043297087756301
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6983335240650746236}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91cd5113d2746444cbba9174db2d99f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  linearSpeed: 4
+  angularSpeed: 180
+  reachThreshold: 0.5
+  robotId: 
+  batterySimulator: {fileID: 0}
+  chargingStationPosition: {x: 0, y: 0, z: 0}
+  chargedThreshold: 95
+  safetyCostMultiplier: 1.2
+  topicNameTarget: /target
+  topicNamePath: /astar_path
+  excavationTopicName: /excavationRequest
+  RobotType: 0
 --- !u!1 &7209438501411388702
 GameObject:
   m_ObjectHideFlags: 0

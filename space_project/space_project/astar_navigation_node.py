@@ -17,14 +17,15 @@ class UnityAStarController(Node):
     def __init__(self):
         super().__init__('unity_astar_controller')
 
-
+        self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
+        #self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
 
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
-        self.target_explorer_sub = self.create_subscription(PoseArray, '/target', self.target_explorer_callback,10)
-        self.path_pub = self.create_publisher(Path, '/astar_path', 10)
+        self.target_explorer_sub = self.create_subscription(PoseArray, 'target', self.target_explorer_callback,10)
+        self.path_pub = self.create_publisher(Path, 'astar_path', 10)
 
-        #self.robots_sub = self.create_subscription(PoseArray, '/robots', self.robots_callback,10)
-        #self.targets_sub = self.create_subscription(PoseArray, '/targets', self.targets_callback,10)
+        self.target_subs = []
+        self.path_pubs = []
 
         self.map_data = None
         self.start = None
@@ -39,18 +40,35 @@ class UnityAStarController(Node):
 
     # Unity coordinates (-50:+50) to Grid indices
     def unity_to_grid(self, x, y):
-        grid_x = int((x + 50) * self.map_row / 100)
-        grid_y = int((y + 50) * self.map_col / 100)
-        # Clamp for safety
+        cell_size = 1
+        local_x = x - (-50)
+        local_y = y - (-50)
+
+        # indici della cella
+        grid_x = int(local_x // cell_size)
+        grid_y = int(local_y // cell_size)
+
+        # inverti l'asse Y per adattarsi alla griglia
+        grid_y = self.map_col - 1 - grid_y
+
+        # clamp per non uscire dai limiti
         grid_x = max(0, min(self.map_row - 1, grid_x))
         grid_y = max(0, min(self.map_col - 1, grid_y))
-        return grid_x, grid_y
+
+        return (grid_y, grid_x)
 
     # Converts grid coordinates (i, j) to Unity coordinates (-50 : 50).
-    def grid_to_unity(self, i, j):
-        x_unity = (i / self.map_row) * 100 - 50
-        y_unity = (j / self.map_col) * 100 - 50
-        return x_unity, y_unity
+    def grid_to_unity(self, grid_y, grid_x):
+        # Inverti l'asse Y
+        cell_size = 1
+        local_y = (self.map_col - 1 - grid_y) * cell_size
+        local_x = grid_x * cell_size
+
+        # Centro della cella
+        x_world = (-50) + local_x + cell_size / 2
+        y_world = (-50) + local_y + cell_size / 2
+
+        return (x_world, y_world)
 
     def is_valid(self, row, col):
         return 0 <= row < self.map_row and 0 <= col < self.map_col
@@ -80,7 +98,7 @@ class UnityAStarController(Node):
 
         return path
 
-    def a_star_search(self, src, dest):
+    def a_star_search(self, src, dest, robot_id):
         # Convert src and dest to grid indices
         path = []
         src = self.unity_to_grid(src[0], src[1])
@@ -138,9 +156,9 @@ class UnityAStarController(Node):
         if not found_dest:
             print("Failed to find the destination cell")
 
-        self.publish_path(path)
+        self.publish_path(path, robot_id)
 
-    def publish_path(self, path):
+    def publish_path(self, path, robot_id):
         if not path:
             print("Failed to publish path")
             return
@@ -160,8 +178,9 @@ class UnityAStarController(Node):
         for i, cell in enumerate(path):
             x_u, y_u = self.grid_to_unity(cell[0], cell[1])
             print(f"Step {i}: GRID=({cell[0]}, {cell[1]}) -> UNITY=({x_u:.2f}, {y_u:.2f})")
-        self.path_pub.publish(path_msg)
-
+        self.path_pubs[robot_id].publish(path_msg)
+        #self.path_pub.publish(path_msg)
+        
     def map_callback(self, msg):
         self.map_row = msg.info.width
         self.map_col = msg.info.height
@@ -194,16 +213,26 @@ class UnityAStarController(Node):
     def robots_callback(self, msg):
         self.robots_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
         self.get_logger().info(f"Received {len(self.robots_list)} robots at points: {self.robots_list}")
+        num_robot = len(self.robots_list)
+        for n in range(0, num_robot):
+            robot_id = f"/tb3_{n}"
+            astar_topic = f"{robot_id}/astar_path"
+            target_topic = f"{robot_id}/target"
+            target_sub = self.create_subscription(PoseArray, target_topic, self.target_explorer_callback,10)
+            path_pub = self.create_publisher(Path, astar_topic, 10)
+            self.target_subs[robot_id] = target_sub
+            self.path_pubs[robot_id] = path_pub
 
     def targets_callback(self, msg):
         self.targets_list = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
         self.get_logger().info(f"Received {len(self.targets_list)} targets at points: {self.targets_list}")
     
     def target_explorer_callback(self, msg):
+        robot_id = msg.pose.header.frame_id # Obtaining robot id from the topic
+        self.target_explorer_sub.topic_name
         explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
         self.get_logger().info(f"Received from explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
-        self.a_star_search(explorer_src_dest[0],explorer_src_dest[1])
-
+        self.a_star_search(explorer_src_dest[0],explorer_src_dest[1], robot_id) # Specifing also the robot id
 
 def main(args=None):
     rclpy.init(args=args)

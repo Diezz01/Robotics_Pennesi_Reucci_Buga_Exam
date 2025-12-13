@@ -5,6 +5,7 @@ using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using RosMessageTypes.Nav;
 using System;
+using RosMessageTypes.RobotInterfaces;
 
 public class ExplorerController : GenericRobotController
 {
@@ -18,15 +19,19 @@ public class ExplorerController : GenericRobotController
     private Queue<MapTarget> targetQueue = new Queue<MapTarget>();
     private MapTarget chargingStation; 
 
+    private string coordinationTopicName = "excavationRequest";
+
     // Start is called before the first frame update
     void Start()
     {
-        robotId = "explorer";
         chargingStationPosition = new Vector3(12f, 0f, -38f);
+        robotId = "tb3_0";
+
         chargingStation = new Target(chargingStationPosition);
         ros = ROSConnection.GetOrCreateInstance();
-        ros.RegisterPublisher<PoseArrayMsg>(topicNameTarget);
-        ros.Subscribe<PathMsg>(topicNamePath, OnRosPathReceived);
+        ros.RegisterPublisher<PoseArrayMsg>($"/{robotId}{topicNameTarget}");
+        ros.RegisterPublisher<ExcavationPointMsg>($"/{coordinationTopicName}");
+        ros.Subscribe<PathMsg>($"/{robotId}{topicNamePath}", OnRosPathReceived);
     }
 
     // Update is called once per frame
@@ -116,6 +121,21 @@ public class ExplorerController : GenericRobotController
         ExcavationPoint excPoint = (ExcavationPoint)currentTarget;
 
         Debug.Log("Excavation Point type: "+excPoint.Type);
+
+        var msgExcPoint = new ExcavationPointMsg();
+
+        // Excavation Point coordinates
+        msgExcPoint.x = excPoint.Position.x;
+        msgExcPoint.y = excPoint.Position.y;
+        msgExcPoint.z = excPoint.Position.z;
+
+        // Excavation Point type
+        msgExcPoint.type = (int)excPoint.Type;
+
+        msgExcPoint.id = excPoint.name; 
+
+        ros.Publish($"/{coordinationTopicName}", msgExcPoint); 
+
         // Normal mission point reached - continue to next target
         StartNextTarget();
     }

@@ -21,6 +21,8 @@ public class OccupancyGridGenerator : MonoBehaviour
     [Tooltip("Number of rocks to spawn")]
     public int numberOfRocks = 30;
 
+    private int robotCounter = 1;
+
     [Tooltip("Minimum position bounds for spawning")]
     public Vector3 minPosition = new Vector3(-48, 0, -48);
 
@@ -111,21 +113,33 @@ public class OccupancyGridGenerator : MonoBehaviour
 
         int[,] grid = new int[mapWidth, mapHeight];
 
-        Vector3 origin = transform.position - new Vector3(mapWidth, 0, mapHeight) * cellSize * 0.5f;
+        Vector3 origin = transform.position - 
+                        new Vector3(mapWidth * cellSize, 0, mapHeight * cellSize) * 0.5f;
 
+        Vector3 halfExtents = new Vector3(cellSize / 2f, heightCheck / 2f, cellSize / 2f);
+            
         for (int x = 0; x < mapWidth; x++)
         {
             for (int y = 0; y < mapHeight; y++)
             {
-                Vector3 cellCenter = origin + new Vector3(x * cellSize + cellSize / 2, heightCheck / 2, y * cellSize + cellSize / 2);
+                Vector3 cellCenter =
+                    origin + new Vector3(x * cellSize + cellSize * 0.5f,
+                                        heightCheck * 0.5f,
+                                        y * cellSize + cellSize * 0.5f);
 
-                if (Physics.CheckBox(cellCenter, new Vector3(cellSize / 2, heightCheck / 2, cellSize / 2), Quaternion.identity, obstacleLayer))
-                {
-                    grid[x, y] = 1; // occupata
-                }
-                else
-                {
-                    grid[x, y] = 0;   // libera
+                bool blocked = Physics.CheckBox(
+                    cellCenter,
+                    halfExtents,
+                    Quaternion.identity,
+                    obstacleLayer
+                );
+
+                int gridY = mapHeight - 1 - y;  
+                if(blocked){
+                    grid[x, gridY] = 1;
+                    
+                }else{
+                    grid[x, gridY] = 0;
                 }
             }
         }
@@ -226,7 +240,25 @@ public class OccupancyGridGenerator : MonoBehaviour
 
     private void SpawnSingleRobot(Vector3 position)
     {
-        Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+        GameObject spawnedRobot = Instantiate(robotPrefab, position, Quaternion.identity, robotsParent);
+
+        ExcavatorController excavatorScript = spawnedRobot.GetComponent<ExcavatorController>();
+        SimplePathFollower pathFollowerScript = spawnedRobot.GetComponent<SimplePathFollower>();
+
+        excavatorScript.robotId = $"tb3_{robotCounter}";
+        pathFollowerScript.topicName = $"/{excavatorScript.robotId}/astar_path";
+        robotCounter ++;
+        excavatorScript.Initialize(excavatorScript.robotId);
+
+        var values = System.Enum.GetValues(typeof(ExcavationPoint.ExcavationType));
+
+        excavatorScript.RobotType = (ExcavatorController.ExcavationRobotType)
+                            values.GetValue(Random.Range(0, values.Length));
+
+        excavatorScript.chargingStationPosition = position;
+
+        Debug.Log($"<color=green>Generated Robot: {excavatorScript.robotId}  Type: {excavatorScript.RobotType} | Pos: {excavatorScript.chargingStationPosition}</color>");
+    
     }
 
     /// <summary>

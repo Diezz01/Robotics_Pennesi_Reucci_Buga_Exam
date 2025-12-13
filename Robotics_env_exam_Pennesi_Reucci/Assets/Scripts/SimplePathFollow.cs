@@ -14,7 +14,7 @@ public class SimplePathFollower : MonoBehaviour
     private MoveState state = MoveState.Rotating;
 
     [Header("ROS")]
-    public string topicName = "/astar_path";
+    public string topicName = "astar_path";
 
     private List<Vector3> path = new List<Vector3>();
     private int currentIndex = 0;
@@ -26,7 +26,7 @@ public class SimplePathFollower : MonoBehaviour
     void Start()
     {
         ros = ROSConnection.GetOrCreateInstance();
-        ros.Subscribe<PathMsg>(topicName, OnRosPathReceived);
+        ros.Subscribe<PathMsg>(topicName, OnRosPathReceived); 
     }
 
 
@@ -96,7 +96,8 @@ public class SimplePathFollower : MonoBehaviour
 
 
     private void OnRosPathReceived(PathMsg msg)
-    {
+    {   
+        Debug.Log($"<color=yellow>Path received: msg: {msg}</color>");
         List<Vector3> newPath = new List<Vector3>();
 
         foreach (var poseStamped in msg.poses)
