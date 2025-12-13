@@ -30,6 +30,10 @@ class CollisionCoordinatorNode(Node):
         self.robot_priorities = {}  # {robot_id: priority_score}
         self.previous_positions = {}  # For velocity calculation
 
+        # Deadlock detection
+        self.robot_stopped_times = {}  # Track how long each robot has been stopped
+        self.deadlock_timeout = 5.0    # Seconds before declaring deadlock
+
         # === TOPICS: Real-time position sharing ===
         self.pose_subs = []
         for i in range(self.num_robots):
@@ -131,8 +135,10 @@ class CollisionCoordinatorNode(Node):
                 
                 if min_distance < self.safe_distance:
                     # Collision imminent! Determine who should stop
-                    # Lower priority robot stops
-                    if self.robot_priorities[id1] < self.robot_priorities[id2]:
+                    # Strict priority: ONLY lower priority stops
+                    # Tie-breaker: if equal priority, lower ID stops
+                    if (self.robot_priorities[id1] < self.robot_priorities[id2] or
+                        (self.robot_priorities[id1] == self.robot_priorities[id2] and id1 < id2)):
                         new_collision_states[id1] = True
                     else:
                         new_collision_states[id2] = True
@@ -148,6 +154,28 @@ class CollisionCoordinatorNode(Node):
                     self.get_logger().debug(
                         f'WARNING: tb3_{id1} and tb3_{id2} approaching: {min_distance:.2f}m'
                     )
+
+        # Check for deadlock: robots stopped for too long
+        for robot_id in robot_ids:
+            if new_collision_states.get(robot_id, False):
+                # Robot is being stopped - track time
+                if robot_id not in self.robot_stopped_times:
+                    self.robot_stopped_times[robot_id] = self.get_clock().now()
+                else:
+                    # Check how long this robot has been stopped
+                    stopped_duration = (self.get_clock().now() - self.robot_stopped_times[robot_id]).nanoseconds / 1e9
+
+                    if stopped_duration > self.deadlock_timeout:
+                        # DEADLOCK DETECTED - clear the stop flag to allow movement
+                        self.get_logger().warning(
+                            f'⚠️ DEADLOCK: tb3_{robot_id} stopped for {stopped_duration:.1f}s - clearing collision flag'
+                        )
+                        new_collision_states[robot_id] = False
+                        del self.robot_stopped_times[robot_id]
+            else:
+                # Robot is moving - clear stopped timer
+                if robot_id in self.robot_stopped_times:
+                    del self.robot_stopped_times[robot_id]
 
         # Publish collision states
         for robot_id in robot_ids:
