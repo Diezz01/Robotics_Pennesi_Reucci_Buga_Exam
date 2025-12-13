@@ -274,8 +274,8 @@ class CollisionCoordinatorNode(Node):
             requesting_priority = self.robot_priorities.get(robot_id, 1000.0)
             conflict_priority = self.robot_priorities.get(conflict_robot, 1000.0)
 
-            if requesting_priority > conflict_priority:
-                # Higher priority - approved
+            if requesting_priority < conflict_priority:  # Lower value = higher priority (closer to goal)
+                # Requesting robot closer to goal - approved
                 response.approved = True
                 response.wait_time = 0.0
                 response.reason = f'Approved (higher priority than tb3_{conflict_robot})'
@@ -283,7 +283,7 @@ class CollisionCoordinatorNode(Node):
                     f'✓ tb3_{robot_id} APPROVED (priority over tb3_{conflict_robot})'
                 )
             else:
-                # Lower priority - wait
+                # Requesting robot farther from goal - wait
                 response.approved = False
                 response.wait_time = 3.0  # Suggest 3 second wait
                 response.reason = f'Wait for tb3_{conflict_robot} ({min_distance:.1f}m away)'
