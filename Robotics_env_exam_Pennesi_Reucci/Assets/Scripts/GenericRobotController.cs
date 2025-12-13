@@ -59,18 +59,18 @@ public abstract class GenericRobotController : MonoBehaviour
         // Check if the point is reached
         if (distance <= reachThreshold)
         {
-            Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
+            //Debug.Log($"Reached path point [{currentPathIndex}]: {target}");
 
             currentPathIndex++;
             if (currentPathIndex >= currentPath.Count)
             {
-                Debug.Log("Path completed!");
+                //Debug.Log("Path completed!");
                 isMoving = false;
                 OnReachedTarget();
                 return;
             }
 
-            Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
+            //Debug.Log($"Next path point [{currentPathIndex}]: {currentPath[currentPathIndex]}");
             moveState = MoveState.Rotating;
             return;
         }
@@ -148,10 +148,10 @@ public abstract class GenericRobotController : MonoBehaviour
 
         string fullTargetTopic = $"/{robotId}{topicNameTarget}"; // Topic should be unique per each robot
 
-        Debug.Log($"<color=yellow>Publishing fullTargetTopic: {fullTargetTopic} | msg: {msg}</color>");
+        Debug.Log($"<color=yellow>Publishing target: {fullTargetTopic} | target: {target}</color>");
         ros.Publish(fullTargetTopic, msg);
 
-        Debug.Log($"<color=yellow>PoseArray published Robot: {robotPos} | Target: {target}</color>");
+        //Debug.Log($"<color=yellow>PoseArray published Robot: {robotPos} | Target: {target}</color>");
         waitingForPath = true;
     }
     protected abstract void OnReachedTarget();

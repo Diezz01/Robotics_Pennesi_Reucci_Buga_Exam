@@ -64,7 +64,7 @@ public class ExcavatorController : GenericRobotController
         
         Vector3 targetPos = new Vector3((float)msg.x, (float)msg.y, (float)msg.z);
 
-        Debug.Log($"<color=green>Mission accepted: This robot handles this excavation type. {targetPos.x} {targetPos.y} {targetPos.z} </color>");
+        Debug.Log($"<color=green>Mission accepted: This robot {robotId} handles this excavation type. {targetPos.x} {targetPos.y} {targetPos.z} </color>");
     
         //currentTarget = new Target(targetPos);
         hasMission = true;

@@ -24,8 +24,8 @@ class UnityAStarController(Node):
         self.target_explorer_sub = self.create_subscription(PoseArray, 'target', self.target_explorer_callback,10)
         self.path_pub = self.create_publisher(Path, 'astar_path', 10)
 
-        self.target_subs = []
-        self.path_pubs = []
+        self.target_subs = {}
+        self.path_pubs = {}
 
         self.map_data = None
         self.start = None
@@ -220,6 +220,8 @@ class UnityAStarController(Node):
             target_topic = f"{robot_id}/target"
             target_sub = self.create_subscription(PoseArray, target_topic, self.target_explorer_callback,10)
             path_pub = self.create_publisher(Path, astar_topic, 10)
+            print("creating topic",astar_topic)
+            print("creating topic",target_topic)
             self.target_subs[robot_id] = target_sub
             self.path_pubs[robot_id] = path_pub
 
@@ -228,7 +230,7 @@ class UnityAStarController(Node):
         self.get_logger().info(f"Received {len(self.targets_list)} targets at points: {self.targets_list}")
     
     def target_explorer_callback(self, msg):
-        robot_id = msg.pose.header.frame_id # Obtaining robot id from the topic
+        robot_id = f"/{msg.header.frame_id}" # Obtaining robot id from the topic
         self.target_explorer_sub.topic_name
         explorer_src_dest = [(p.position.x, p.position.z, p.position.y) for p in msg.poses]
         self.get_logger().info(f"Received from explorer: src {explorer_src_dest[0]} dest {explorer_src_dest[1]}")
