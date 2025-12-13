@@ -334,25 +334,20 @@ class UnityAStarController(Node):
                 else:
                     self.get_logger().error(f'{robot_name}: Failed to find path')
             else:
-                # Path NOT approved
-                if attempt < 5:  # Max 5 retry attempts
-                    # Exponential backoff: 1s, 2s, 4s, 8s, 16s
-                    wait_time = 2 ** attempt
-                    self.get_logger().warn(
-                        f'{robot_name}: Path NOT approved - {response.reason}. '
-                        f'Retry {attempt+1}/5 in {wait_time}s'
-                    )
+                # Path NOT approved - keep retrying with constant backoff
+                # Use constant 3-second backoff (matches collision coordinator's suggested wait_time)
+                wait_time = 3.0
+                self.get_logger().warn(
+                    f'{robot_name}: Path NOT approved - {response.reason}. '
+                    f'Retrying in {wait_time}s (attempt #{attempt+1})'
+                )
 
-                    # Schedule retry with timer
-                    timer = self.create_timer(
-                        wait_time,
-                        lambda: self.retry_path_request(robot_idx, src, dest, attempt+1)
-                    )
-                    self.retry_timers[robot_idx] = timer
-                else:
-                    self.get_logger().error(
-                        f'{robot_name}: Path approval failed after 5 attempts - giving up'
-                    )
+                # Schedule retry with timer (no limit on attempts)
+                timer = self.create_timer(
+                    wait_time,
+                    lambda: self.retry_path_request(robot_idx, src, dest, attempt+1)
+                )
+                self.retry_timers[robot_idx] = timer
         except Exception as e:
             # Service call failed - plan anyway as fallback
             self.get_logger().warning(f'{robot_name}: Service call failed ({e}) - planning without approval')
@@ -370,7 +365,7 @@ class UnityAStarController(Node):
             del self.retry_timers[robot_idx]
 
         robot_name = f'tb3_{robot_idx}'
-        self.get_logger().info(f'{robot_name}: Retrying path request (attempt {attempt}/5)')
+        self.get_logger().info(f'{robot_name}: Retrying path request (attempt #{attempt})')
 
         request = PathApproval.Request()
         request.robot_id = robot_idx
