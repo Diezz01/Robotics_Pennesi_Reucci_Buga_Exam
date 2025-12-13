@@ -217,6 +217,9 @@ class CollisionCoordinatorNode(Node):
                 # Lower distance = higher priority (lower value)
                 # Add small robot_id tiebreaker to ensure uniqueness
                 self.robot_priorities[robot_id] = distance + (robot_id * 0.01)
+            else:
+                # Robot has goal but no position yet - assign low priority
+                self.robot_priorities[robot_id] = 999.0 + (robot_id * 0.01)
 
     def path_approval_callback(self, request, response):
         """PREDICTIVE: Approve/reject path before robot starts moving"""
@@ -267,7 +270,11 @@ class CollisionCoordinatorNode(Node):
         # Approve or reject based on priority
         if conflict_robot is not None:
             # Use priority to decide
-            if self.robot_priorities[robot_id] > self.robot_priorities[conflict_robot]:
+            # Default to very low priority (high distance) if priority not yet calculated
+            requesting_priority = self.robot_priorities.get(robot_id, 1000.0)
+            conflict_priority = self.robot_priorities.get(conflict_robot, 1000.0)
+
+            if requesting_priority > conflict_priority:
                 # Higher priority - approved
                 response.approved = True
                 response.wait_time = 0.0
