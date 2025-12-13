@@ -22,7 +22,7 @@ class UnityAStarController(Node):
         super().__init__('unity_astar_controller')
 
         # Declare parameter for number of robots
-        self.declare_parameter('num_robots', 6)
+        self.declare_parameter('num_robots', 4)
 
         num_robots = self.get_parameter('num_robots').value
 
@@ -253,9 +253,9 @@ class UnityAStarController(Node):
 
         # Print grid sample if obstacles detected
         if obstacle_count > 0:
-            self.get_logger().info('Grid sample (first 30x30, X=obstacle, .=free):')
-            for r in range(min(30, len(grid))):
-                print(''.join('X' if c == 1 else '.' for c in grid[r][:30]))
+            self.get_logger().info('Grid sample (first 100x100, X=obstacle, .=free):')
+            for r in range(min(100, len(grid))):
+                print(''.join('X' if c == 1 else '.' for c in grid[r][:100]))
         else:
             self.get_logger().warning('NO OBSTACLES DETECTED! Check Unity obstacle layer configuration.')
 
